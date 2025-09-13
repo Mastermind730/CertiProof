@@ -13,3 +13,32 @@ datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
 }
+
+enum ROLE{
+  STUDENT
+  ADMIN
+}
+
+model User{
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  email String? @unique
+  name String
+  role ROLE @default(STUDENT)
+  cerificates Certificate[]
+
+  @@map("users")
+}
+
+model Certificate {
+  id              String         @id @default(uuid()) @map("_id") @db.ObjectId
+  hash            String         @unique
+  owner           User           @relation(fields: [ownerId], references: [id])
+  ownerId         String @db.ObjectId
+  offChainUrl     String
+  issuerName      String
+  courseName      String
+  issueDate       DateTime
+  transactionHash String?
+  
+  @@map("certificates") // Optional: maps the model name to a table name in your database
+}

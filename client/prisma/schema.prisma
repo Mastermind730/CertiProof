@@ -26,6 +26,11 @@ model User{
   role ROLE @default(STUDENT)
   cerificates Certificate[]
 
+  wallet_address String @unique
+  profile_image String?
+
+
+
   @@map("users")
 }
 

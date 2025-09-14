@@ -29,4 +29,5 @@ export type JWTPayload = {
   name: string;
   role: string;
   wallet_address: string;
+  profile_image: string;
 };

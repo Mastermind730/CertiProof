@@ -35,6 +35,7 @@ export async function GET() {
         name: true,
         role: true,
         wallet_address: true,
+        profile_image:true,
         cerificates: {
           select: {
             id: true,
@@ -95,6 +96,7 @@ export async function PUT(req: NextRequest) {
         name: true,
         role: true,
         wallet_address: true,
+        profile_image:true,
       },
     });
 

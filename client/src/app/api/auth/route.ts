@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     const email = userInfo?.email || null;
     const name = userInfo?.name || null;
     const wallet_address = address;
+    const profile_image = userInfo.profile_image || "";
 
     // Find or create user
     const user = await prisma.user.upsert({
@@ -27,11 +28,13 @@ export async function POST(req: NextRequest) {
         // Update these fields if they're provided and the user already exists
         ...(email && { email }),
         ...(name && { name }),
+        ...(profile_image && {profile_image}),
       },
       create: {
         email,
         name,
         wallet_address,
+        profile_image,
       },
     });
 
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
       name: user.name,
       role: user.role,
       wallet_address: user.wallet_address,
+      profile_image: user.profile_image || "",
     };
 
     // Generate JWT token

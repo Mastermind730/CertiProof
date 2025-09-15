@@ -9,7 +9,7 @@ module.exports = {
       network_id: "5777"
     },
     sepolia: {
-      provider: () => new HDWalletProvider(mnemonic,"https://ethereum-sepolia.core.chainstack.com/e93417f68627bda4a8223074c5479466"),
+      provider: () => new HDWalletProvider(mnemonic,"https://eth-sepolia.g.alchemy.com/v2/hhnZL7TzL20tzfZb2flv7fBiK_1xP6gk"),
       network_id: 11155111,
       gas: 4500000,
       gasPrice: 10000000000
@@ -20,7 +20,7 @@ module.exports = {
       version: "0.8.15",    // Specify the compiler version
       settings: {
         optimizer: {
-          enabled: false,  // Set to true for optimization
+          enabled: true,  // Set to true for optimization
           runs: 200        // The number of optimizer runs
         },
         viaIR: false,      // Set to true to enable IR compilation

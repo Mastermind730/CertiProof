@@ -1,13 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { ethers, BrowserProvider, Contract, Signer } from "ethers";
+import { ethers, Contract } from "ethers";
+import Web3Modal from "web3modal"; // make sure it's installed
 import { ADDRESS, ABI } from "@/contract";
 
 // Define types for the context value
 interface BlockchainContextType {
-  account: string | null;
   contract: Contract | null;
+  provider: ethers.providers.Web3Provider | null;
+  signer: ethers.Signer | null;
+  address: string | null;
 }
 
 // Create context with proper typing
@@ -19,47 +23,45 @@ interface BlockchainProviderProps {
 }
 
 export const BlockchainProvider = ({ children }: BlockchainProviderProps) => {
-  const [account, setAccount] = useState<string | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
+  const [provider, setProvider] = useState<ethers.providers.Web3Provider | null>(null);
+  const [signer, setSigner] = useState<ethers.Signer | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if window.ethereum exists and has the correct type
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      const init = async () => {
-        try {
-          const provider = new BrowserProvider((window as any).ethereum);
-          const signer: Signer = await provider.getSigner();
+    const initializeContract = async () => {
+      try {
+        const web3Modal = new Web3Modal();
+        const connection = await web3Modal.connect();
 
-          // Request wallet connection with proper typing
-          const accounts: string[] = await (window as any).ethereum.request({
-            method: "eth_requestAccounts",
-          });
-          setAccount(accounts[0]);
+        const _provider = new ethers.BrowserProvider(connection);
+        await _provider.send("eth_requestAccounts", []);
 
-          // Initialize contract
-          const contractInstance = new Contract(
-            ADDRESS,
-            ABI,
-            signer
-          );
-          setContract(contractInstance);
-        } catch (error) {
-          console.error("Error initializing blockchain context:", error);
-        }
-      };
+        const _signer = await _provider.getSigner();
+        const _address = await _signer.getAddress();
 
-      init();
-    }
+        const _contract = new ethers.Contract(ADDRESS, ABI, _signer);
+
+        setProvider(_provider);
+        setSigner(_signer);
+        setAddress(_address);
+        setContract(_contract);
+      } catch (err) {
+        console.error("Error initializing Web3:", err);
+      }
+    };
+
+    initializeContract();
   }, []);
 
   return (
-    <BlockchainContext.Provider value={{ account, contract }}>
+    <BlockchainContext.Provider value={{ contract, provider, signer, address }}>
       {children}
     </BlockchainContext.Provider>
   );
 };
 
-export const useBlockchain = (): BlockchainContextType => {
+export const useBlockchain = () => {
   const context = useContext(BlockchainContext);
   if (context === undefined) {
     throw new Error("useBlockchain must be used within a BlockchainProvider");

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Navigation } from "@/app/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Button } from "@/app/components/ui/button"
@@ -17,6 +17,10 @@ import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useBlockchain } from "@/app/context/DocContext"
+
+
+
 
 interface CertificateForm {
   studentName: string
@@ -47,6 +51,27 @@ export default function CreateCertificatePage() {
     credits: "",
     instructor: "",
   })
+
+  const {contract} = useBlockchain();
+  console.log(contract,"contract");
+
+  //getting the contract and account from the context 
+useEffect(() => {
+    const getOwner = async () => {
+      if (contract) {
+        try {
+          const owner = await contract.owningAuthority();
+          console.log("Contract owner:", owner);
+        } catch (error) {
+          console.error("Error getting owner:", error);
+        }
+      }
+    };
+    
+    getOwner();
+  }, [contract]);
+
+  
 
   const handleInputChange = (field: keyof CertificateForm, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import Provider from "./components/provider";
+import { BlockchainProvider } from "./context/DocContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +31,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Provider web3authInitialState={web3authInitialState}>{children}</Provider>
+        <Provider web3authInitialState={web3authInitialState}>
+          <BlockchainProvider>
+          {children}
+          </BlockchainProvider>
+          </Provider>
         {/* <Provider web3authInitialState={web3authInitialState}>{children}</Provider> */}
       </body>
     </html>

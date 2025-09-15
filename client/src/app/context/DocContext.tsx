@@ -2,14 +2,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { ethers, Contract } from "ethers";
-import Web3Modal from "web3modal"; // make sure it's installed
+import { ethers, Contract, BaseContract } from "ethers";
+import Web3Modal from "web3modal";
 import { ADDRESS, ABI } from "@/contract";
 
 // Define types for the context value
 interface BlockchainContextType {
-  contract: Contract | null;
-  provider: ethers.providers.Web3Provider | null;
+  contract: BaseContract | null;
+  provider: ethers.BrowserProvider | null; // Use BrowserProvider for client-side
   signer: ethers.Signer | null;
   address: string | null;
 }
@@ -23,8 +23,8 @@ interface BlockchainProviderProps {
 }
 
 export const BlockchainProvider = ({ children }: BlockchainProviderProps) => {
-  const [contract, setContract] = useState<Contract | null>(null);
-  const [provider, setProvider] = useState<ethers.providers.Web3Provider | null>(null);
+  const [contract, setContract] = useState<BaseContract | null>(null);
+  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [address, setAddress] = useState<string | null>(null);
 
@@ -34,18 +34,22 @@ export const BlockchainProvider = ({ children }: BlockchainProviderProps) => {
         const web3Modal = new Web3Modal();
         const connection = await web3Modal.connect();
 
+        // Use the provider from the user's wallet connection
         const _provider = new ethers.BrowserProvider(connection);
-        await _provider.send("eth_requestAccounts", []);
-
+        
+        // Get the signer from the provider, which is the connected user
         const _signer = await _provider.getSigner();
-        const _address = await _signer.getAddress();
 
+        const _address = await _signer.getAddress();
+        
+        // Initialize the contract with the user's signer
         const _contract = new ethers.Contract(ADDRESS, ABI, _signer);
 
         setProvider(_provider);
         setSigner(_signer);
         setAddress(_address);
         setContract(_contract);
+
       } catch (err) {
         console.error("Error initializing Web3:", err);
       }

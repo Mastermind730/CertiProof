@@ -55,6 +55,7 @@ export default function CreateCertificatePage() {
   const {contract} = useBlockchain();
   console.log(contract,"contract");
 
+  
   //getting the contract and account from the context 
 useEffect(() => {
     const getOwner = async () => {
@@ -82,20 +83,50 @@ useEffect(() => {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+  e.preventDefault();
+  setIsLoading(true);
 
-    // Simulate certificate creation and blockchain transaction
-    setTimeout(() => {
-      setIsLoading(false)
-      setIsSuccess(true)
-
-      // Redirect after success
-      setTimeout(() => {
-        router.push("/admin")
-      }, 2000)
-    }, 3000)
+  if (!contract) {
+    console.error("Contract not initialized");
+    setIsLoading(false);
+    return;
   }
+
+  try {
+    // Prepare certificate data
+    const name = formData.studentName;
+    const details = `
+      Email: ${formData.studentEmail},
+      Course: ${formData.courseName} (${formData.courseCode}),
+      Grade: ${formData.grade},
+      Credits: ${formData.credits},
+      Instructor: ${formData.instructor},
+      IssueDate: ${formData.issueDate?.toISOString() ?? ""},
+      CompletionDate: ${formData.completionDate?.toISOString() ?? ""},
+      Description: ${formData.description}
+    `;
+
+    // Send transaction to blockchain
+    const tx = await contract.issueCertificate(name, details);
+    console.log("Transaction submitted:", tx.hash);
+
+    // Wait for confirmation
+    const receipt = await tx.wait();
+    console.log("Transaction confirmed:", receipt);
+
+    setIsLoading(false);
+    setIsSuccess(true);
+
+    // Redirect after success
+    setTimeout(() => {
+      router.push("/admin");
+    }, 2000);
+  } catch (error) {
+    console.error("Error issuing certificate:", error);
+    setIsLoading(false);
+  }
+};
+
 
   const isFormValid =
     formData.studentName && formData.studentEmail && formData.courseName && formData.grade && formData.issueDate

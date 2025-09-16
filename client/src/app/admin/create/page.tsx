@@ -1,67 +1,65 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
+import { useEffect, useState } from "react";
+import { Navigation } from "@/app/components/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
+import { Textarea } from "@/app/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
+import { Calendar } from "@/app/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
+import { ArrowLeft, CalendarIcon, Shield, CheckCircle, Loader2, Wallet } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useBlockchain } from "@/app/context/DocContext";
 
-import { useEffect, useState } from "react"
-import { Navigation } from "@/app/components/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
-import { Button } from "@/app/components/ui/button"
-import { Input } from "@/app/components/ui/input"
-import { Label } from "@/app/components/ui/label"
-import { Textarea } from "@/app/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select"
-import { Calendar } from "@/app/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover"
-import { ArrowLeft, CalendarIcon, Shield, CheckCircle, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { format } from "date-fns"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useBlockchain } from "@/app/context/DocContext"
-
-
-
-
+// Define the shape of the form data
 interface CertificateForm {
-  studentName: string
-  studentEmail: string
-  courseName: string
-  courseCode: string
-  grade: string
-  issueDate: Date | undefined
-  completionDate: Date | undefined
-  description: string
-  credits: string
-  instructor: string
+  studentName: string;
+  studentEmail: string;
+  courseName: string;
+  courseCode: string;
+  grade: string;
+  issueDate: Date | undefined;
+  completionDate: Date | undefined;
+  description: string;
+  credits: string;
+  instructor: string;
 }
 
 export default function CreateCertificatePage() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [formData, setFormData] = useState<CertificateForm>({
     studentName: "",
     studentEmail: "",
     courseName: "",
     courseCode: "",
     grade: "",
-    issueDate: undefined,
+    issueDate: new Date(), // Default to today
     completionDate: undefined,
     description: "",
     credits: "",
     instructor: "",
-  })
+  });
 
-  const {contract} = useBlockchain();
-  console.log(contract,"contract");
+  // Destructure what you need from the context
+  const { contract, address, connectWallet, isConnecting } = useBlockchain();
 
-  
-  //getting the contract and account from the context 
-useEffect(() => {
+  // This useEffect will run when the contract is successfully connected
+  useEffect(() => {
     const getOwner = async () => {
+      // Add a guard to ensure the contract exists
       if (contract) {
         try {
-          const owner = await contract.owningAuthority();
+          // I'm assuming 'owningAuthority' from your original code
+          const owner = await (contract as any).owningAuthority();
           console.log("Contract owner:", owner);
         } catch (error) {
           console.error("Error getting owner:", error);
@@ -70,67 +68,86 @@ useEffect(() => {
     };
     
     getOwner();
-  }, [contract]);
-
-  
+  }, [contract]); // This dependency is correct
 
   const handleInputChange = (field: keyof CertificateForm, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleDateChange = (field: "issueDate" | "completionDate", date: Date | undefined) => {
-    setFormData((prev) => ({ ...prev, [field]: date }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: date }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsLoading(true);
+    e.preventDefault();
+    if (!contract) {
+      console.error("Contract not initialized");
+      return;
+    }
+    setIsLoading(true);
 
-  if (!contract) {
-    console.error("Contract not initialized");
-    setIsLoading(false);
-    return;
-  }
+    try {
+      const details = JSON.stringify({
+        email: formData.studentEmail,
+        course: formData.courseName,
+        courseCode: formData.courseCode,
+        grade: formData.grade,
+        credits: formData.credits,
+        instructor: formData.instructor,
+        issueDate: formData.issueDate?.toISOString(),
+        completionDate: formData.completionDate?.toISOString(),
+        description: formData.description,
+      });
 
-  try {
-    // Prepare certificate data
-    const name = formData.studentName;
-    const details = `
-      Email: ${formData.studentEmail},
-      Course: ${formData.courseName} (${formData.courseCode}),
-      Grade: ${formData.grade},
-      Credits: ${formData.credits},
-      Instructor: ${formData.instructor},
-      IssueDate: ${formData.issueDate?.toISOString() ?? ""},
-      CompletionDate: ${formData.completionDate?.toISOString() ?? ""},
-      Description: ${formData.description}
-    `;
+      const tx = await (contract as any).issueCertificate(formData.studentName, details);
+      console.log("Transaction submitted:", tx.hash);
 
-    // Send transaction to blockchain
-    const tx = await contract.issueCertificate(name, details);
-    console.log("Transaction submitted:", tx.hash);
+      await tx.wait(); // Wait for confirmation
+      
+      setIsSuccess(true);
+      setTimeout(() => router.push("/admin"), 3000);
 
-    // Wait for confirmation
-    const receipt = await tx.wait();
-    console.log("Transaction confirmed:", receipt);
-
-    setIsLoading(false);
-    setIsSuccess(true);
-
-    // Redirect after success
-    setTimeout(() => {
-      router.push("/admin");
-    }, 2000);
-  } catch (error) {
-    console.error("Error issuing certificate:", error);
-    setIsLoading(false);
-  }
-};
-
+    } catch (error) {
+      console.error("Error issuing certificate:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const isFormValid =
-    formData.studentName && formData.studentEmail && formData.courseName && formData.grade && formData.issueDate
+    formData.studentName && formData.studentEmail && formData.courseName && formData.grade && formData.issueDate;
 
+  // Render a loading/connect state if the wallet is not connected yet
+  if (!address) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container flex items-center justify-center" style={{ minHeight: '80vh' }}>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
+            <p className="text-muted-foreground mb-6">
+              Please connect your wallet to access the certificate creation page.
+            </p>
+            <Button onClick={connectWallet} disabled={isConnecting} size="lg">
+              {isConnecting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <Wallet className="mr-2 h-5 w-5" />
+                  Connect Wallet
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render success screen
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-background">
@@ -143,26 +160,10 @@ useEffect(() => {
                 <h2 className="text-2xl font-bold text-green-800 dark:text-green-400 mb-4">
                   Certificate Created Successfully!
                 </h2>
-                <p className="text-green-700 dark:text-green-300 mb-6">
-                  The certificate has been issued and recorded on the blockchain. The student will receive an email
-                  notification.
+                <p className="text-muted-foreground mb-6">
+                  The certificate has been issued and recorded on the blockchain. You will be redirected shortly.
                 </p>
-                <div className="space-y-2 text-sm text-green-600 dark:text-green-400">
-                  <p>
-                    Certificate ID:{" "}
-                    <span className="font-mono">
-                      CERT-2024-
-                      {Math.floor(Math.random() * 999999)
-                        .toString()
-                        .padStart(6, "0")}
-                    </span>
-                  </p>
-                  <p>
-                    Blockchain Transaction:{" "}
-                    <span className="font-mono">0x{Math.random().toString(16).substr(2, 16)}...</span>
-                  </p>
-                </div>
-                <Button className="mt-6" onClick={() => router.push("/admin")}>
+                <Button onClick={() => router.push("/admin")}>
                   Return to Dashboard
                 </Button>
               </CardContent>
@@ -170,30 +171,26 @@ useEffect(() => {
           </div>
         </div>
       </div>
-    )
+    );
   }
-
+  
+  // Render the main form once connected
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex items-center space-x-4 mb-8">
-            <Link href="/admin">
-              <Button variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Dashboard
-              </Button>
-            </Link>
+              </Link>
+            </Button>
             <div>
-              <div className="inline-flex items-center space-x-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium mb-2">
-                <Shield className="h-4 w-4" />
-                <span>Issue Certificate</span>
-              </div>
               <h1 className="text-3xl font-bold">Create New Certificate</h1>
-              <p className="text-muted-foreground">Issue a new blockchain-verified certificate to a student</p>
+              <p className="text-muted-foreground">Issue a new blockchain-verified certificate to a student.</p>
             </div>
           </div>
 
@@ -207,25 +204,11 @@ useEffect(() => {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="studentName">Full Name *</Label>
-                    <Input
-                      id="studentName"
-                      placeholder="Enter student's full name"
-                      value={formData.studentName}
-                      onChange={(e) => handleInputChange("studentName", e.target.value)}
-                      required
-                    />
+                    <Input id="studentName" placeholder="Enter student's full name" value={formData.studentName} onChange={(e) => handleInputChange("studentName", e.target.value)} required />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="studentEmail">Email Address *</Label>
-                    <Input
-                      id="studentEmail"
-                      type="email"
-                      placeholder="student@example.com"
-                      value={formData.studentEmail}
-                      onChange={(e) => handleInputChange("studentEmail", e.target.value)}
-                      required
-                    />
+                    <Input id="studentEmail" type="email" placeholder="student@example.com" value={formData.studentEmail} onChange={(e) => handleInputChange("studentEmail", e.target.value)} required />
                   </div>
                 </CardContent>
               </Card>
@@ -238,33 +221,15 @@ useEffect(() => {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="courseName">Course Name *</Label>
-                    <Input
-                      id="courseName"
-                      placeholder="e.g., Advanced Web Development"
-                      value={formData.courseName}
-                      onChange={(e) => handleInputChange("courseName", e.target.value)}
-                      required
-                    />
+                    <Input id="courseName" placeholder="e.g., Advanced Web Development" value={formData.courseName} onChange={(e) => handleInputChange("courseName", e.target.value)} required />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="courseCode">Course Code</Label>
-                    <Input
-                      id="courseCode"
-                      placeholder="e.g., CS-401"
-                      value={formData.courseCode}
-                      onChange={(e) => handleInputChange("courseCode", e.target.value)}
-                    />
+                    <Input id="courseCode" placeholder="e.g., CS-401" value={formData.courseCode} onChange={(e) => handleInputChange("courseCode", e.target.value)} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="credits">Credits</Label>
-                    <Input
-                      id="credits"
-                      placeholder="e.g., 4"
-                      value={formData.credits}
-                      onChange={(e) => handleInputChange("credits", e.target.value)}
-                    />
+                    <Input id="credits" placeholder="e.g., 4" value={formData.credits} onChange={(e) => handleInputChange("credits", e.target.value)} />
                   </div>
                 </CardContent>
               </Card>
@@ -276,7 +241,7 @@ useEffect(() => {
                 <CardTitle>Assessment & Dates</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="grade">Grade *</Label>
                     <Select value={formData.grade} onValueChange={(value) => handleInputChange("grade", value)}>
@@ -286,66 +251,38 @@ useEffect(() => {
                       <SelectContent>
                         <SelectItem value="A+">A+</SelectItem>
                         <SelectItem value="A">A</SelectItem>
-                        <SelectItem value="A-">A-</SelectItem>
-                        <SelectItem value="B+">B+</SelectItem>
                         <SelectItem value="B">B</SelectItem>
-                        <SelectItem value="B-">B-</SelectItem>
-                        <SelectItem value="C+">C+</SelectItem>
                         <SelectItem value="C">C</SelectItem>
                         <SelectItem value="Pass">Pass</SelectItem>
                         <SelectItem value="Distinction">Distinction</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Completion Date</Label>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !formData.completionDate && "text-muted-foreground",
-                          )}
-                        >
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !formData.completionDate && "text-muted-foreground")}>
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {formData.completionDate ? format(formData.completionDate, "PPP") : "Pick a date"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.completionDate}
-                          onSelect={(date) => handleDateChange("completionDate", date)}
-                          initialFocus
-                        />
+                        <Calendar mode="single" selected={formData.completionDate} onSelect={(date) => handleDateChange("completionDate", date)} initialFocus />
                       </PopoverContent>
                     </Popover>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Issue Date *</Label>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !formData.issueDate && "text-muted-foreground",
-                          )}
-                        >
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !formData.issueDate && "text-muted-foreground")}>
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {formData.issueDate ? format(formData.issueDate, "PPP") : "Pick a date"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={formData.issueDate}
-                          onSelect={(date) => handleDateChange("issueDate", date)}
-                          initialFocus
-                        />
+                        <Calendar mode="single" selected={formData.issueDate} onSelect={(date) => handleDateChange("issueDate", date)} initialFocus />
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -361,39 +298,25 @@ useEffect(() => {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="instructor">Instructor</Label>
-                  <Input
-                    id="instructor"
-                    placeholder="e.g., Dr. Sarah Johnson"
-                    value={formData.instructor}
-                    onChange={(e) => handleInputChange("instructor", e.target.value)}
-                  />
+                  <Input id="instructor" placeholder="e.g., Dr. Jane Doe" value={formData.instructor} onChange={(e) => handleInputChange("instructor", e.target.value)} />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="description">Course Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Brief description of the course content and achievements..."
-                    value={formData.description}
-                    onChange={(e) => handleInputChange("description", e.target.value)}
-                    rows={3}
-                  />
+                  <Textarea id="description" placeholder="Brief description of the course content..." value={formData.description} onChange={(e) => handleInputChange("description", e.target.value)} rows={3} />
                 </div>
               </CardContent>
             </Card>
 
             {/* Submit Button */}
             <div className="flex justify-end space-x-4">
-              <Link href="/admin">
-                <Button variant="outline" type="button">
-                  Cancel
-                </Button>
-              </Link>
+              <Button asChild variant="outline" type="button">
+                 <Link href="/admin">Cancel</Link>
+              </Button>
               <Button type="submit" disabled={!isFormValid || isLoading} size="lg" className="min-w-[200px]">
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Creating Certificate...
+                    Issuing On-Chain...
                   </>
                 ) : (
                   <>
@@ -407,5 +330,5 @@ useEffect(() => {
         </div>
       </div>
     </div>
-  )
+  );
 }

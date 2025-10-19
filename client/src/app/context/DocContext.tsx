@@ -1,20 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { ethers, Contract, BaseContract } from "ethers";
+import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import { ethers, BaseContract } from "ethers";
 import Web3Modal from "web3modal";
 import { ADDRESS, ABI } from "@/contract";
 
 // Define types for the context value
 interface BlockchainContextType {
   contract: BaseContract | null;
-  provider: ethers.BrowserProvider | null; // Use BrowserProvider for client-side
+  provider: ethers.BrowserProvider | null;
   signer: ethers.Signer | null;
   address: string | null;
+  isConnecting: boolean;
+  connectWallet: () => Promise<void>; // Function to trigger connection
 }
 
-// Create context with proper typing
+// Create context
 const BlockchainContext = createContext<BlockchainContextType | undefined>(undefined);
 
 // Define props for the provider
@@ -27,39 +29,53 @@ export const BlockchainProvider = ({ children }: BlockchainProviderProps) => {
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<ethers.Signer | null>(null);
   const [address, setAddress] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
-  useEffect(() => {
-    const initializeContract = async () => {
-      try {
-        const web3Modal = new Web3Modal();
-        const connection = await web3Modal.connect();
+  // Use useCallback to memoize the function
+  const connectWallet = useCallback(async () => {
+    // Prevent multiple connection requests
+    if (isConnecting || address) return;
 
-        // Use the provider from the user's wallet connection
-        const _provider = new ethers.BrowserProvider(connection);
-        
-        // Get the signer from the provider, which is the connected user
-        const _signer = await _provider.getSigner();
+    try {
+      setIsConnecting(true);
 
-        const _address = await _signer.getAddress();
-        
-        // Initialize the contract with the user's signer
-        const _contract = new ethers.Contract(ADDRESS, ABI, _signer);
+      const web3Modal = new Web3Modal({
+        cacheProvider: true, // optional
+        providerOptions: {}, // required
+      });
+      const connection = await web3Modal.connect();
+      const _provider = new ethers.BrowserProvider(connection);
+      const _signer = await _provider.getSigner();
+      const _address = await _signer.getAddress();
+      const _contract = new ethers.Contract(ADDRESS, ABI, _signer);
 
-        setProvider(_provider);
-        setSigner(_signer);
-        setAddress(_address);
-        setContract(_contract);
+      setProvider(_provider);
+      setSigner(_signer);
+      setAddress(_address);
+      setContract(_contract);
 
-      } catch (err) {
-        console.error("Error initializing Web3:", err);
-      }
-    };
+      // Listen for account changes
+      connection.on("accountsChanged", (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setAddress(accounts[0]);
+        } else {
+          // Handle disconnection
+          setAddress(null);
+          setSigner(null);
+          setContract(null);
+          setProvider(null);
+        }
+      });
 
-    initializeContract();
-  }, []);
+    } catch (err) {
+      console.error("Error connecting wallet:", err);
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [isConnecting, address]); // Dependencies for useCallback
 
   return (
-    <BlockchainContext.Provider value={{ contract, provider, signer, address }}>
+    <BlockchainContext.Provider value={{ contract, provider, signer, address, isConnecting, connectWallet }}>
       {children}
     </BlockchainContext.Provider>
   );

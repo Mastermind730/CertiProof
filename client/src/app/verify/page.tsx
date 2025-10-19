@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRef } from "react"
 import { Navigation } from "@/app/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Button } from "@/app/components/ui/button"
@@ -26,36 +27,105 @@ interface CertificateData {
 
 export default function VerifyPage() {
   const [certificateId, setCertificateId] = useState("")
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [verificationResult, setVerificationResult] = useState<CertificateData | null>(null)
   const [error, setError] = useState("")
+  const [emailPromptSent, setEmailPromptSent] = useState(false)
+  const [waitingForApproval, setWaitingForApproval] = useState(false)
+  const [approvalToken, setApprovalToken] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleVerify = async () => {
-    if (!certificateId.trim()) {
+  // Handles PDF upload and triggers email prompt
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPdfFile(file)
+    setError("")
+    setVerificationResult(null)
+    setIsLoading(true)
+    setEmailPromptSent(false)
+    setWaitingForApproval(false)
+    setApprovalToken("")
+
+    // Send PDF to backend to extract info and send email
+    const formData = new FormData()
+    formData.append("pdf", file)
+
+    try {
+      const response = await fetch("/api/verify/upload", {
+        method: "POST",
+        body: formData,
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error || "Failed to process PDF")
+        setIsLoading(false)
+        return
+      }
+      if (data.emailPromptSent && data.approvalToken) {
+        setEmailPromptSent(true)
+        setWaitingForApproval(true)
+        setApprovalToken(data.approvalToken)
+      } else {
+        setError("Failed to send email prompt")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+      console.error("PDF upload error:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Polls backend for approval status
+  const pollForApproval = async () => {
+    if (!approvalToken) return
+    setIsLoading(true)
+    setError("")
+    try {
+      const response = await fetch(`/api/verify/approval?token=${approvalToken}`)
+      const data = await response.json()
+      if (data.approved) {
+        setWaitingForApproval(false)
+        // Now verify certificate
+        await handleVerify(data.certificateId)
+      } else if (data.rejected) {
+        setWaitingForApproval(false)
+        setError("Verification was rejected by the certificate owner.")
+      } else {
+        setError("Waiting for user approval...")
+      }
+    } catch (err) {
+      setError("Network error while polling approval.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Handles certificate verification after approval
+  const handleVerify = async (certId?: string) => {
+    const idToVerify = certId || certificateId.trim()
+    if (!idToVerify) {
       setError("Please enter a certificate ID")
       return
     }
-
     setIsLoading(true)
     setError("")
     setVerificationResult(null)
-
     try {
       const response = await fetch("/api/verify", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ certificateId: certificateId.trim() }),
+        body: JSON.stringify({ certificateId: idToVerify }),
       })
-
       const data = await response.json()
-
       if (!response.ok) {
         setError(data.error || "Failed to verify certificate")
         return
       }
-
       if (data.success && data.certificate) {
         setVerificationResult(data.certificate)
       } else {
@@ -88,7 +158,7 @@ export default function VerifyPage() {
             </p>
           </div>
 
-          {/* Verification Form */}
+          {/* Verification Form with PDF upload */}
           <Card className="mb-8 border-2 hover:border-primary/50 transition-all duration-300">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -112,25 +182,64 @@ export default function VerifyPage() {
                 </p>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="pdfUpload">Or upload your certificate PDF</Label>
+                <Input
+                  id="pdfUpload"
+                  type="file"
+                  accept="application/pdf"
+                  ref={fileInputRef}
+                  onChange={handlePdfUpload}
+                  className="text-lg py-6"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Upload the official PDF gradecard/certificate to verify and notify the owner
+                </p>
+              </div>
+
               {error && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <p className="text-destructive font-medium">{error}</p>
                 </div>
               )}
 
-              <Button onClick={handleVerify} disabled={isLoading} className="w-full text-lg py-6" size="lg">
-                {isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
-                    Verifying on Blockchain...
-                  </>
-                ) : (
-                  <>
-                    <Search className="mr-2 h-5 w-5" />
-                    Verify Certificate
-                  </>
-                )}
-              </Button>
+              {!pdfFile && (
+                <Button onClick={() => handleVerify()} disabled={isLoading} className="w-full text-lg py-6" size="lg">
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                      Verifying on Blockchain...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="mr-2 h-5 w-5" />
+                      Verify Certificate
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {pdfFile && waitingForApproval && (
+                <Button onClick={pollForApproval} disabled={isLoading} className="w-full text-lg py-6" size="lg">
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                      Waiting for owner approval...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="mr-2 h-5 w-5" />
+                      Check Approval Status
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {pdfFile && emailPromptSent && !waitingForApproval && (
+                <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+                  <p className="text-primary font-medium">Verification approved! Proceeding...</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

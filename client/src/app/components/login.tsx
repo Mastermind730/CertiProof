@@ -26,11 +26,11 @@ function Login() {
     loading: disconnectLoading, 
     error: disconnectError 
   } = useWeb3AuthDisconnect();
-  const { 
-    userInfo, 
-    isLoading: userLoading,  // Fixed: changed from isLoading to isLoading
-    error: userError 
-  } = useWeb3AuthUser();
+ const { 
+  userInfo, 
+  loading: userLoading = false,  // Provide default value
+  error: userError 
+} = useWeb3AuthUser();
   const { address, connector } = useAccount();
   const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
 

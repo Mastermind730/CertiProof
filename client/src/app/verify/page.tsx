@@ -12,6 +12,7 @@ import { Separator } from "@/app/components/ui/separator"
 import { Search, CheckCircle, XCircle, Shield, Calendar, User, Building, Award, Hash, Clock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+
 interface CertificateData {
   certificateId: string
   studentName: string

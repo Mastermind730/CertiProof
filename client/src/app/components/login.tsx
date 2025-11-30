@@ -5,15 +5,34 @@ import { useWeb3AuthConnect, useWeb3AuthDisconnect, useWeb3AuthUser } from "@web
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 
+// Define types for user info based on Web3Auth response structure
+interface UserInfo {
+  email?: string;
+  name?: string;
+  profileImage?: string;
+  [key: string]: any;
+}
+
 function Login() {
   const router = useRouter();
-  const { connect, isConnected, loading: connectLoading, error: connectError } =
-    useWeb3AuthConnect();
-  const { disconnect, loading: disconnectLoading, error: disconnectError } =
-    useWeb3AuthDisconnect();
-  const { userInfo, isLoading: userLoading, error: userError } = useWeb3AuthUser();
+  const { 
+    connect, 
+    isConnected, 
+    loading: connectLoading, 
+    error: connectError 
+  } = useWeb3AuthConnect();
+  const { 
+    disconnect, 
+    loading: disconnectLoading, 
+    error: disconnectError 
+  } = useWeb3AuthDisconnect();
+  const { 
+    userInfo, 
+    isLoading: userLoading,  // Fixed: changed from isLoading to isLoading
+    error: userError 
+  } = useWeb3AuthUser();
   const { address, connector } = useAccount();
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState<boolean>(false);
 
   // Handle successful login and redirect to dashboard
   useEffect(() => {
@@ -51,14 +70,13 @@ function Login() {
     }
   }, [isConnected, userInfo, userLoading, address, router]);
 
-  const handleConnect = async () => {
+  const handleConnect = async (): Promise<void> => {
     try {
       await connect();
     } catch (err) {
       console.error("Connect failed:", err);
     }
   };
-
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">

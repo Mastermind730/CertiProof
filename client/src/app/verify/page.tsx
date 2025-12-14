@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Navigation } from "@/app/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Button } from "@/app/components/ui/button"
@@ -9,8 +8,17 @@ import { Input } from "@/app/components/ui/input"
 import { Label } from "@/app/components/ui/label"
 import { Badge } from "@/app/components/ui/badge"
 import { Separator } from "@/app/components/ui/separator"
-import { Search, CheckCircle, XCircle, Shield, Calendar, User, Building, Award, Hash, Clock } from "lucide-react"
+import { Search, CheckCircle, XCircle, Shield, Calendar, User, Building, Award, Hash, Clock, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+// libraries for PDF rendering and QR decoding
+import jsQR from "jsqr"
+import * as pdfjsLib from "pdfjs-dist"
+
+// Set worker src to CDN matching the installed version
+if (typeof window !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs`
+}
 
 
 interface CertificateData {
@@ -32,83 +40,171 @@ export default function VerifyPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [verificationResult, setVerificationResult] = useState<CertificateData | null>(null)
   const [error, setError] = useState("")
-  const [emailPromptSent, setEmailPromptSent] = useState(false)
-  const [waitingForApproval, setWaitingForApproval] = useState(false)
-  const [approvalToken, setApprovalToken] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Approval flow state
+  const [uploading, setUploading] = useState(false)
+  const [extractedPayload, setExtractedPayload] = useState<any | null>(null)
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [approvalStatus, setApprovalStatus] = useState<"pending" | "approved" | "rejected" | null>(null)
+  const pollRef = useRef<number | null>(null)
 
-  // Handles PDF upload and triggers email prompt
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current)
+    }
+  }, [])
+
+  // extract QR payload from first page of PDF using pdfjs + jsqr
+  async function extractQrPayloadFromPdf(file: File) {
+    const arrayBuffer = await file.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2 })
+
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.floor(viewport.width)
+    canvas.height = Math.floor(viewport.height)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Canvas 2D not supported")
+
+    const renderContext = {
+      canvasContext: ctx,
+      viewport,
+      canvas: canvas
+    }
+    await page.render(renderContext).promise
+
+    // grab image data
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const code = jsQR(imageData.data, imageData.width, imageData.height)
+    if (!code) throw new Error("No QR code found in the PDF (page 1)")
+
+    // try parse JSON payload
+    try {
+      const payload = JSON.parse(code.data)
+      return payload
+    } catch (e) {
+      return { raw: code.data }
+    }
+  }
+
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    
     setPdfFile(file)
+    setUploading(true)
     setError("")
     setVerificationResult(null)
-    setIsLoading(true)
-    setEmailPromptSent(false)
-    setWaitingForApproval(false)
-    setApprovalToken("")
-
-    // Send PDF to backend to extract info and send email
-    const formData = new FormData()
-    formData.append("pdf", file)
+    setExtractedPayload(null)
+    setRequestId(null)
+    setApprovalStatus(null)
 
     try {
-      const response = await fetch("/api/verify/upload", {
+      // Extract QR code data from PDF
+      const payload = await extractQrPayloadFromPdf(file)
+      console.log("Extracted QR payload:", payload)
+      setExtractedPayload(payload)
+      
+      if (!payload.email) {
+        setError("No 'email' field found in QR payload — cannot proceed")
+        setUploading(false)
+        return
+      }
+
+      // Send to server to create verification request
+      const form = new FormData()
+      form.append("pdf", file)
+      form.append("payload", JSON.stringify(payload))
+
+      const res = await fetch("/api/verify/upload", {
         method: "POST",
-        body: formData,
+        body: form,
       })
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || "Failed to process PDF")
+
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error || "Failed to create approval request")
+        setUploading(false)
+        return
+      }
+
+      setRequestId(body.requestId)
+      setApprovalStatus("pending")
+      startPolling(body.requestId)
+    } catch (err: any) {
+      setError(err?.message || "Failed to extract QR code from PDF. Please enter PRN manually.")
+      console.error("PDF upload error:", err)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Start polling approval status
+  const startPolling = (rid: string) => {
+    if (pollRef.current) window.clearInterval(pollRef.current)
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const res = await fetch(`/api/verify/approval?requestId=${encodeURIComponent(rid)}`)
+        const body = await res.json()
+        if (body.status === "approved") {
+          window.clearInterval(pollRef.current!)
+          setApprovalStatus("approved")
+          proceedToVerifyAfterApproval(body.certificateId)
+        } else if (body.status === "rejected") {
+          window.clearInterval(pollRef.current!)
+          setApprovalStatus("rejected")
+        }
+      } catch (err) {
+        console.error("Polling error", err)
+      }
+    }, 3000)
+  }
+
+  // Called when approved
+  const proceedToVerifyAfterApproval = async (certId?: string) => {
+    setIsLoading(true)
+    setError("")
+    setVerificationResult(null)
+
+    try {
+      const idToVerify = certId || extractedPayload?.prn || extractedPayload?.certificateId
+      const verifierEmail = extractedPayload?.verifierEmail || extractedPayload?.email
+      
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          prn: idToVerify,
+          verifierEmail,
+          payload: extractedPayload, 
+          requestId 
+        }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error || "Verification failed")
         setIsLoading(false)
         return
       }
-      if (data.emailPromptSent && data.approvalToken) {
-        setEmailPromptSent(true)
-        setWaitingForApproval(true)
-        setApprovalToken(data.approvalToken)
+      if (body.success && body.certificate) {
+        setVerificationResult(body.certificate)
       } else {
-        setError("Failed to send email prompt")
+        setError("Verification failed")
       }
     } catch (err) {
-      setError("Network error. Please try again.")
-      console.error("PDF upload error:", err)
+      console.error(err)
+      setError("Network / verification error")
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Polls backend for approval status
-  const pollForApproval = async () => {
-    if (!approvalToken) return
-    setIsLoading(true)
-    setError("")
-    try {
-      const response = await fetch(`/api/verify/approval?token=${approvalToken}`)
-      const data = await response.json()
-      if (data.approved) {
-        setWaitingForApproval(false)
-        // Now verify certificate
-        await handleVerify(data.certificateId)
-      } else if (data.rejected) {
-        setWaitingForApproval(false)
-        setError("Verification was rejected by the certificate owner.")
-      } else {
-        setError("Waiting for user approval...")
-      }
-    } catch (err) {
-      setError("Network error while polling approval.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Handles certificate verification after approval
-  const handleVerify = async (certId?: string) => {
-    const idToVerify = certId || certificateId.trim()
+  const handleVerify = async (prn?: string) => {
+    const idToVerify = prn || certificateId.trim()
     if (!idToVerify) {
-      setError("Please enter a certificate ID")
+      setError("Please enter a certificate ID (PRN)")
       return
     }
     setIsLoading(true)
@@ -146,7 +242,6 @@ export default function VerifyPage() {
 
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
           <div className="text-center mb-12">
             <div className="inline-flex items-center space-x-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Shield className="h-4 w-4" />
@@ -154,12 +249,10 @@ export default function VerifyPage() {
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Verify Certificate Authenticity</h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Enter a certificate ID to instantly verify its authenticity using our blockchain-powered verification
-              system
+              Enter a certificate ID to instantly verify its authenticity using our blockchain-powered verification system
             </p>
           </div>
 
-          {/* Verification Form with PDF upload */}
           <Card className="mb-8 border-2 hover:border-primary/50 transition-all duration-300">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
@@ -169,22 +262,31 @@ export default function VerifyPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="certificateId">Certificate ID</Label>
+                <Label htmlFor="certificateId">Certificate ID / PRN</Label>
                 <Input
                   id="certificateId"
-                  placeholder="Enter certificate ID (e.g., CERT-2024-001234)"
+                  placeholder="Enter certificate PRN (e.g., ABC123)"
                   value={certificateId}
                   onChange={(e) => setCertificateId(e.target.value)}
                   className="text-lg py-6"
                   onKeyPress={(e) => e.key === "Enter" && handleVerify()}
                 />
                 <p className="text-sm text-muted-foreground">
-                  The certificate ID can be found on your digital certificate document
+                  The PRN can be found on your certificate document
                 </p>
               </div>
 
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="pdfUpload">Or upload your certificate PDF</Label>
+                <Label htmlFor="pdfUpload">Upload Certificate PDF</Label>
                 <Input
                   id="pdfUpload"
                   type="file"
@@ -194,9 +296,23 @@ export default function VerifyPage() {
                   className="text-lg py-6"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Upload the official PDF gradecard/certificate to verify and notify the owner
+                  Upload the PDF to automatically extract the PRN from the QR code
                 </p>
               </div>
+
+              {uploading && <p className="text-sm">Extracting QR & creating approval request…</p>}
+
+              {extractedPayload && (
+                <div className="p-3 rounded bg-muted text-sm">
+                  <p><strong>Extracted PRN:</strong> {String(extractedPayload.prn ?? "-")}</p>
+                  <p><strong>Extracted Email:</strong> {String(extractedPayload.email ?? "-")}</p>
+                </div>
+              )}
+
+              {requestId && <p className="text-sm">Approval request sent — Request ID: <code>{requestId}</code></p>}
+              {approvalStatus === "pending" && <p className="text-sm text-muted-foreground">Waiting for recipient approval via email...</p>}
+              {approvalStatus === "approved" && <p className="text-sm text-green-600">Approved — verifying now</p>}
+              {approvalStatus === "rejected" && <p className="text-sm text-red-600">Rejected by recipient — verification stopped</p>}
 
               {error && (
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -204,47 +320,22 @@ export default function VerifyPage() {
                 </div>
               )}
 
-              {!pdfFile && (
-                <Button onClick={() => handleVerify()} disabled={isLoading} className="w-full text-lg py-6" size="lg">
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
-                      Verifying on Blockchain...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="mr-2 h-5 w-5" />
-                      Verify Certificate
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {pdfFile && waitingForApproval && (
-                <Button onClick={pollForApproval} disabled={isLoading} className="w-full text-lg py-6" size="lg">
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
-                      Waiting for owner approval...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="mr-2 h-5 w-5" />
-                      Check Approval Status
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {pdfFile && emailPromptSent && !waitingForApproval && (
-                <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
-                  <p className="text-primary font-medium">Verification approved! Proceeding...</p>
-                </div>
-              )}
+              <Button onClick={() => handleVerify()} disabled={isLoading || !certificateId.trim()} className="w-full text-lg py-6" size="lg">
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                    Verifying on Blockchain...
+                  </>
+                ) : (
+                  <>
+                    <Search className="mr-2 h-5 w-5" />
+                    Verify Certificate
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
 
-          {/* Verification Result */}
           {verificationResult && (
             <Card
               className={cn(
@@ -271,102 +362,13 @@ export default function VerifyPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {verificationResult.isValid ? (
-                  <>
-                    {/* Certificate Details */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div className="space-y-4">
-                        <div className="flex items-start space-x-3">
-                          <User className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Student Name</p>
-                            <p className="text-lg">{verificationResult.studentName}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3">
-                          <Award className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Course/Program</p>
-                            <p className="text-lg">{verificationResult.courseName}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3">
-                          <Building className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Institution</p>
-                            <p className="text-lg">{verificationResult.institution}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="flex items-start space-x-3">
-                          <Calendar className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Issue Date</p>
-                            <p className="text-lg">{new Date(verificationResult.issueDate).toLocaleDateString()}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3">
-                          <Award className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Grade</p>
-                            <p className="text-lg font-semibold text-primary">{verificationResult.grade}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3">
-                          <Clock className="h-5 w-5 text-primary mt-1" />
-                          <div>
-                            <p className="font-medium">Verified At</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(verificationResult.verificationTime).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Blockchain Details */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold flex items-center space-x-2">
-                        <Shield className="h-5 w-5 text-primary" />
-                        <span>Blockchain Verification Details</span>
-                      </h3>
-
-                      <div className="grid gap-4">
-                        <div className="flex items-start space-x-3">
-                          <Hash className="h-5 w-5 text-primary mt-1" />
-                          <div className="flex-1">
-                            <p className="font-medium">Certificate Hash</p>
-                            <p className="text-sm font-mono bg-muted p-2 rounded break-all">
-                              {verificationResult.certificateHash}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-start space-x-3">
-                          <Hash className="h-5 w-5 text-primary mt-1" />
-                          <div className="flex-1">
-                            <p className="font-medium">Blockchain Transaction ID</p>
-                            <p className="text-sm font-mono bg-muted p-2 rounded break-all">
-                              {verificationResult.blockchainTxId}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-primary/10 p-4 rounded-lg">
-                      <p className="text-sm text-primary font-medium">
-                        ✓ This certificate has been cryptographically verified on the blockchain and is authentic.
-                      </p>
-                    </div>
-                  </>
+                  <div className="text-center py-8">
+                    <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold text-green-600 mb-2">Certificate Verified Successfully!</h3>
+                    <p className="text-muted-foreground">
+                      This certificate has been cryptographically verified on the blockchain and is authentic.
+                    </p>
+                  </div>
                 ) : (
                   <div className="text-center py-8">
                     <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
@@ -379,46 +381,6 @@ export default function VerifyPage() {
               </CardContent>
             </Card>
           )}
-
-          {/* How Verification Works */}
-          <Card className="mt-12 border-2">
-            <CardHeader>
-              <CardTitle>How Our Verification Works</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-primary font-bold">1</span>
-                  </div>
-                  <h4 className="font-semibold mb-2">Enter Certificate ID</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Input the unique certificate identifier found on your digital certificate
-                  </p>
-                </div>
-
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-primary font-bold">2</span>
-                  </div>
-                  <h4 className="font-semibold mb-2">Blockchain Lookup</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Our system queries the blockchain to find the certificate record
-                  </p>
-                </div>
-
-                <div className="text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <span className="text-primary font-bold">3</span>
-                  </div>
-                  <h4 className="font-semibold mb-2">Instant Results</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Get immediate verification results with full certificate details
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

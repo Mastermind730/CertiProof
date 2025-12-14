@@ -1,126 +1,112 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import crypto from "crypto"
+import { prisma } from "@/lib/prismadb"
+import { sendVerificationRequestEmail } from "@/lib/email"
 
-// In-memory store for approval requests (use DB in production)
+// In-memory store for approval requests (use DB/Redis in production)
 export const approvalRequests = new Map<string, {
-  certificateId?: string
+  prn: string
   email: string
+  verifierEmail: string
+  verifierName?: string
   payload: any
   status: "pending" | "approved" | "rejected"
+  certificateId?: string
   createdAt: Date
 }>()
 
-// POST /api/verify/upload
+// POST /api/verify/upload - Create verification request from PDF payload
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get("pdf") as File
+    const payloadStr = formData.get("payload") as string
     
     if (!file || file.type !== "application/pdf") {
       return NextResponse.json({ error: "Invalid PDF file" }, { status: 400 })
     }
 
-    // For now, we'll extract payload from frontend and send it in formData
-    // The frontend already extracts QR payload, so we receive it here
-    const payloadStr = formData.get("payload") as string
-    
     if (!payloadStr) {
-      return NextResponse.json({ 
-        error: "No payload found. Please ensure the PDF contains a valid QR code with certificate data." 
-      }, { status: 400 })
+      return NextResponse.json({ error: "Payload is required" }, { status: 400 })
     }
 
-    let payload: any
+    let payload
     try {
       payload = JSON.parse(payloadStr)
     } catch (e) {
-      return NextResponse.json({ error: "Invalid payload format" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid payload JSON" }, { status: 400 })
     }
 
-    if (!payload.email) {
+    const { prn, email, verifierEmail, verifierName } = payload
+
+    if (!prn || !email) {
       return NextResponse.json({ 
-        error: "Email not found in certificate payload" 
+        error: "PRN and email are required in the QR payload" 
       }, { status: 400 })
     }
 
-    // Generate unique request ID
-    const requestId = crypto.randomBytes(16).toString("hex")
-    
-    // Store approval request
+    // Find the certificate
+    const certificate = await prisma.certificate.findUnique({
+      where: { prn },
+      include: { owner: true },
+    })
+
+    if (!certificate) {
+      return NextResponse.json({ 
+        error: "Certificate not found" 
+      }, { status: 404 })
+    }
+
+    // Create verification request in database
+    const verificationRequest = await prisma.verificationRequest.create({
+      data: {
+        certificateId: certificate.id,
+        studentId: certificate.ownerId,
+        verifierName: verifierName || "Anonymous Verifier",
+        verifierEmail: verifierEmail || email,
+        verifierOrg: payload.verifierOrg,
+        purpose: "Certificate Verification via PDF Upload",
+        status: "PENDING",
+      },
+    })
+
+    // Store in memory for polling
+    const requestId = verificationRequest.id
     approvalRequests.set(requestId, {
-      certificateId: payload.certificateId || payload.prn,
-      email: payload.email,
+      prn,
+      email,
+      verifierEmail: verifierEmail || email,
+      verifierName,
       payload,
       status: "pending",
-      createdAt: new Date()
+      certificateId: certificate.id,
+      createdAt: new Date(),
     })
 
     // Send email notification
     try {
-      await sendApprovalEmail(payload.email, requestId, payload)
+      await sendVerificationRequestEmail(
+        certificate.studentEmail,
+        certificate.studentName,
+        verifierName || "Anonymous Verifier",
+        verifierEmail || email,
+        prn,
+        requestId
+      )
     } catch (emailError) {
-      console.error("Email sending failed:", emailError)
-      // Continue anyway - we can still manually approve
+      console.error("Failed to send email:", emailError)
     }
 
     return NextResponse.json({ 
       success: true,
       requestId,
-      message: "Approval request sent to certificate owner"
+      message: "Verification request created. Awaiting approval."
     })
+    
   } catch (error) {
     console.error("Upload error:", error)
     return NextResponse.json({ 
-      error: "Failed to process upload" 
+      error: "Failed to process verification request" 
     }, { status: 500 })
   }
-}
-
-async function sendApprovalEmail(email: string, requestId: string, payload: any) {
-  // For production, use a proper email service
-  // For now, we'll use nodemailer with environment variables
-  
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("Email credentials not configured. Skipping email.")
-    return
-  }
-
-  const nodemailer = require("nodemailer")
-  
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  })
-
-  const approveUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/verify/approval?requestId=${requestId}&action=approve`
-  const rejectUrl = `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/verify/approval?requestId=${requestId}&action=reject`
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Certificate Verification Request",
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">Certificate Verification Request</h2>
-        <p>Someone is trying to verify your certificate/gradecard:</p>
-        <ul>
-          <li><strong>PRN:</strong> ${payload.prn || "N/A"}</li>
-          <li><strong>Email:</strong> ${payload.email}</li>
-          <li><strong>Issue Date:</strong> ${payload.issueDate ? new Date(payload.issueDate).toLocaleDateString() : "N/A"}</li>
-        </ul>
-        <p>If you approve this verification request, the requester will be able to see your certificate details.</p>
-        <div style="margin: 30px 0;">
-          <a href="${approveUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin-right: 10px;">Approve</a>
-          <a href="${rejectUrl}" style="background-color: #f44336; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reject</a>
-        </div>
-        <p style="color: #666; font-size: 12px;">This link will expire in 24 hours.</p>
-      </div>
-    `,
-  }
-
-  await transporter.sendMail(mailOptions)
 }

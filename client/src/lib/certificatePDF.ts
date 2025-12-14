@@ -150,8 +150,16 @@ export async function generateCertificatePDF(data: CertificatePDFData): Promise<
   const qrX = pageWidth - 45;
   const qrY = bottomY - 5;
   
-  // Generate QR code with verification URL or PRN
-  const qrData = data.verificationUrl || `PRN:${data.prn}|SNo:${data.sno}`;
+  // Generate QR code with embedded certificate data (JSON payload)
+  const qrPayload = {
+    prn: data.prn,
+    sno: data.sno,
+    email: data.studentEmail,
+    name: data.studentName,
+    course: data.courseName,
+    verifyUrl: data.verificationUrl || `${typeof window !== 'undefined' ? window.location.origin : ''}/verify?prn=${data.prn}`
+  };
+  const qrData = JSON.stringify(qrPayload);
   const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
     width: 200,
     margin: 1,

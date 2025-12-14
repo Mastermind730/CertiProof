@@ -57,13 +57,66 @@ export async function POST(req: NextRequest) {
       }, { status: 404 })
     }
 
-    // Create verification request in database
+    const emailToCheck = verifierEmail || email
+
+    // Check if there's already an approved request for this verifier
+    const existingApproval = await prisma.verificationRequest.findFirst({
+      where: {
+        certificateId: certificate.id,
+        verifierEmail: emailToCheck,
+        status: "APPROVED",
+      },
+    })
+
+    // If already approved, return success immediately
+    if (existingApproval) {
+      return NextResponse.json({ 
+        success: true,
+        requestId: existingApproval.id,
+        message: "Already approved. You can view the certificate.",
+        status: "APPROVED",
+        alreadyApproved: true,
+      })
+    }
+
+    // Check if there's already a pending request
+    const existingPending = await prisma.verificationRequest.findFirst({
+      where: {
+        certificateId: certificate.id,
+        verifierEmail: emailToCheck,
+        status: "PENDING",
+      },
+    })
+
+    // If already pending, return existing request
+    if (existingPending) {
+      // Update in-memory store
+      approvalRequests.set(existingPending.id, {
+        prn,
+        email,
+        verifierEmail: emailToCheck,
+        verifierName,
+        payload,
+        status: "pending",
+        certificateId: certificate.id,
+        createdAt: new Date(),
+      })
+
+      return NextResponse.json({ 
+        success: true,
+        requestId: existingPending.id,
+        message: "Verification request already pending. Awaiting approval.",
+        status: "PENDING",
+      })
+    }
+
+    // Create new verification request in database
     const verificationRequest = await prisma.verificationRequest.create({
       data: {
         certificateId: certificate.id,
         studentId: certificate.ownerId,
         verifierName: verifierName || "Anonymous Verifier",
-        verifierEmail: verifierEmail || email,
+        verifierEmail: emailToCheck,
         verifierOrg: payload.verifierOrg,
         purpose: "Certificate Verification via PDF Upload",
         status: "PENDING",

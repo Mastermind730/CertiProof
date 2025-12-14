@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { approvalRequests } from "../upload/route"
+import { prisma } from "@/lib/prismadb"
 
 // GET /api/verify/approval - Handle approval/rejection and status polling
 export async function GET(req: NextRequest) {
@@ -12,16 +13,42 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Request ID is required" }, { status: 400 })
   }
 
+  // Check database first for the verification request
+  let dbRequest;
+  try {
+    dbRequest = await prisma.verificationRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        certificate: true,
+      },
+    });
+  } catch (error) {
+    console.error("Database query error:", error);
+  }
+
   const request = approvalRequests.get(requestId)
   
-  if (!request) {
+  if (!request && !dbRequest) {
     return NextResponse.json({ error: "Invalid or expired request" }, { status: 404 })
   }
 
   // Handle approve/reject actions
   if (action === "approve") {
-    request.status = "approved"
-    approvalRequests.set(requestId, request)
+    if (request) {
+      request.status = "approved"
+      approvalRequests.set(requestId, request)
+    }
+    
+    // Also update database if exists
+    if (dbRequest) {
+      await prisma.verificationRequest.update({
+        where: { id: requestId },
+        data: {
+          status: "APPROVED",
+          respondedAt: new Date(),
+        },
+      });
+    }
     
     return new NextResponse(
       `
@@ -71,8 +98,21 @@ export async function GET(req: NextRequest) {
   }
 
   if (action === "reject") {
-    request.status = "rejected"
-    approvalRequests.set(requestId, request)
+    if (request) {
+      request.status = "rejected"
+      approvalRequests.set(requestId, request)
+    }
+    
+    // Also update database if exists
+    if (dbRequest) {
+      await prisma.verificationRequest.update({
+        where: { id: requestId },
+        data: {
+          status: "REJECTED",
+          respondedAt: new Date(),
+        },
+      });
+    }
     
     return new NextResponse(
       `
@@ -122,9 +162,29 @@ export async function GET(req: NextRequest) {
   }
 
   // Status polling - return current status
-  return NextResponse.json({
-    status: request.status,
-    certificateId: request.certificateId,
-    payload: request.status === "approved" ? request.payload : null,
-  })
+  // Prioritize database status if available
+  if (dbRequest) {
+    const status = dbRequest.status === "APPROVED" ? "approved" : 
+                   dbRequest.status === "REJECTED" ? "rejected" : "pending";
+    
+    return NextResponse.json({
+      status,
+      certificateId: dbRequest.certificateId,
+      prn: dbRequest.certificate.prn,
+      verifierEmail: dbRequest.verifierEmail,
+      payload: status === "approved" ? request?.payload : null,
+    });
+  }
+  
+  // Fall back to in-memory status (should always exist at this point)
+  if (request) {
+    return NextResponse.json({
+      status: request.status,
+      certificateId: request.certificateId,
+      payload: request.status === "approved" ? request.payload : null,
+    });
+  }
+  
+  // Shouldn't reach here, but handle gracefully
+  return NextResponse.json({ error: "Request not found" }, { status: 404 });
 }

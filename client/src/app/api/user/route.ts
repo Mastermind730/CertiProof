@@ -4,9 +4,22 @@ import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/jwt";
 
 // Helper function to authenticate requests using JWT
-async function authenticateRequest() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("auth_token")?.value;
+async function authenticateRequest(req?: NextRequest) {
+  let token: string | undefined;
+
+  // Try to get token from Authorization header first
+  if (req) {
+    const authHeader = req.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  // Fall back to cookie-based auth
+  if (!token) {
+    const cookieStore = await cookies();
+    token = cookieStore.get("auth_token")?.value;
+  }
 
   if (!token) {
     throw new Error("No auth token provided");
@@ -20,9 +33,9 @@ async function authenticateRequest() {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const tokenPayload = await authenticateRequest();
+    const tokenPayload = await authenticateRequest(req);
 
     // Get fresh user data from database
     const user = await prisma.user.findUnique({

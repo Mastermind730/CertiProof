@@ -122,7 +122,7 @@ export default function StudentCertificatesPage() {
         });
         if (certResponse.ok) {
           const userData = await certResponse.json();
-          setStudentId(userData.id);
+          setStudentId(userData.user?.id || "");
         }
       }
     } catch (error) {
@@ -147,8 +147,14 @@ export default function StudentCertificatesPage() {
       if (!userResponse.ok) return;
 
       const userData = await userResponse.json();
-      const sid = userData.id;
+      const sid = userData.user?.id;
+      if (!sid) {
+        console.error("Student ID not found in user data");
+        return;
+      }
       setStudentId(sid);
+
+      console.log("Fetching verification requests for student ID:", sid);
 
       const response = await fetch(`/api/verification-request?studentId=${sid}`, {
         headers: {
@@ -158,7 +164,10 @@ export default function StudentCertificatesPage() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log("Verification requests fetched:", data.requests?.length || 0);
         setVerificationRequests(data.requests || []);
+      } else {
+        console.error("Failed to fetch verification requests:", response.status, response.statusText);
       }
     } catch (error) {
       console.error("Error fetching verification requests:", error);

@@ -45,6 +45,42 @@ export async function POST(req: NextRequest) {
       }, { status: 403 })
     }
 
+    // Verify on blockchain
+    let blockchainVerified = false
+    let blockchainError = null
+    
+    try {
+      const { ethers } = await import("ethers")
+      const { ABI, ADDRESS } = await import("@/contract")
+      
+      // Set a timeout for blockchain verification (10 seconds for remote RPC)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Blockchain connection timeout")), 10000)
+      )
+      
+      const verifyPromise = (async () => {
+        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL
+        if (!rpcUrl) {
+          throw new Error("RPC URL not configured")
+        }
+        const provider = new ethers.JsonRpcProvider(rpcUrl)
+        const contract = new ethers.Contract(ADDRESS, ABI, provider)
+        return await contract.verifyCertificate(prn, certificate.hash)
+      })()
+      
+      // Race between timeout and verification
+      blockchainVerified = await Promise.race([verifyPromise, timeoutPromise]) as boolean
+      console.log("Blockchain verification result:", blockchainVerified)
+    } catch (error: any) {
+      blockchainError = error.message || "Blockchain unavailable"
+      console.log("Blockchain verification skipped:", blockchainError)
+      // If certificate has a transaction hash, it was verified when created
+      if (certificate.transactionHash) {
+        blockchainVerified = true
+        console.log("Certificate was previously verified on blockchain (tx:", certificate.transactionHash, ")")
+      }
+    }
+
     // Return certificate data
     return NextResponse.json({
       success: true,
@@ -61,7 +97,9 @@ export async function POST(req: NextRequest) {
         completionDate: certificate.completionDate,
         certificateUrl: certificate.certificateUrl,
         transactionHash: certificate.transactionHash,
-        isValid: true,
+        blockchainVerified,
+        blockchainError,
+        isValid: true, // Certificate is valid if it exists in database and approved
         verificationTime: new Date().toISOString(),
       },
     })

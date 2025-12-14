@@ -13,12 +13,6 @@ import { cn } from "@/lib/utils"
 
 // libraries for PDF rendering and QR decoding
 import jsQR from "jsqr"
-import * as pdfjsLib from "pdfjs-dist"
-
-// Set worker src to CDN matching the installed version
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs`
-}
 
 
 interface CertificateData {
@@ -57,8 +51,14 @@ export default function VerifyPage() {
 
   // extract QR payload from first page of PDF using pdfjs + jsqr
   async function extractQrPayloadFromPdf(file: File) {
+    // Dynamically import pdfjs-dist only when needed (client-side only)
+    const pdfjs = await import("pdfjs-dist")
+    
+    // Set worker src to CDN matching the installed version
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs`
+    
     const arrayBuffer = await file.arrayBuffer()
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
     const page = await pdf.getPage(1)
     const viewport = page.getViewport({ scale: 2 })
 
@@ -131,8 +131,16 @@ export default function VerifyPage() {
       }
 
       setRequestId(body.requestId)
-      setApprovalStatus("pending")
-      startPolling(body.requestId)
+      
+      // Check if already approved
+      if (body.alreadyApproved || body.status === "APPROVED") {
+        setApprovalStatus("approved")
+        // Directly proceed to verification
+        proceedToVerifyAfterApproval(payload.prn, payload.verifierEmail || payload.email)
+      } else {
+        setApprovalStatus("pending")
+        startPolling(body.requestId)
+      }
     } catch (err: any) {
       setError(err?.message || "Failed to extract QR code from PDF. Please enter PRN manually.")
       console.error("PDF upload error:", err)
@@ -151,7 +159,8 @@ export default function VerifyPage() {
         if (body.status === "approved") {
           window.clearInterval(pollRef.current!)
           setApprovalStatus("approved")
-          proceedToVerifyAfterApproval(body.certificateId)
+          // Use PRN and verifierEmail from the response
+          proceedToVerifyAfterApproval(body.prn, body.verifierEmail)
         } else if (body.status === "rejected") {
           window.clearInterval(pollRef.current!)
           setApprovalStatus("rejected")
@@ -163,21 +172,23 @@ export default function VerifyPage() {
   }
 
   // Called when approved
-  const proceedToVerifyAfterApproval = async (certId?: string) => {
+  const proceedToVerifyAfterApproval = async (prn?: string, verifierEmail?: string) => {
     setIsLoading(true)
     setError("")
     setVerificationResult(null)
 
     try {
-      const idToVerify = certId || extractedPayload?.prn || extractedPayload?.certificateId
-      const verifierEmail = extractedPayload?.verifierEmail || extractedPayload?.email
+      const idToVerify = prn || extractedPayload?.prn || extractedPayload?.certificateId
+      const emailToUse = verifierEmail || extractedPayload?.verifierEmail || extractedPayload?.email
+      
+      console.log("Verifying with:", { prn: idToVerify, verifierEmail: emailToUse })
       
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           prn: idToVerify,
-          verifierEmail,
+          verifierEmail: emailToUse,
           payload: extractedPayload, 
           requestId 
         }),

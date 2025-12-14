@@ -1,467 +1,477 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Navigation } from "@/app/components/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
-import { Button } from "@/app/components/ui/button"
-import { Badge } from "@/app/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/app/components/ui/avatar"
-import { Award, Download, Share2, Eye, Calendar, Building, User, Shield, ExternalLink, Copy, Check } from "lucide-react"
-import { Input } from "@/app/components/ui/input"
-import { Label } from "@/app/components/ui/label"
-import { Separator } from "@/app/components/ui/separator"
-import { toast } from "@/app/hooks/use-toast"
+import { useEffect, useState } from "react";
+import { Navigation } from "@/app/components/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Separator } from "@/app/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/app/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/app/components/ui/table";
+import { Award, Download, ExternalLink, Calendar, Building2, GraduationCap, FileText, Loader2, ShieldCheck } from "lucide-react";
+import { format } from "date-fns";
+import { useRouter } from "next/navigation";
 
-interface StudentCertificate {
-  id: string
-  certificateId: string
-  courseName: string
-  courseCode: string
-  institution: string
-  grade: string
-  issueDate: string
-  completionDate: string
-  status: "active" | "pending" | "revoked"
-  blockchainTxId: string
-  certificateHash: string
-  credits: number
-  instructor: string
-  description: string
+interface Certificate {
+  id: string;
+  prn: string;
+  sno: string;
+  hash: string;
+  studentName: string;
+  studentEmail: string;
+  marks: Array<{ subject: string; marks: number }>;
+  issuerId: string;
+  issuerName: string;
+  courseName: string;
+  degree?: string;
+  specialization?: string;
+  cgpa?: number;
+  division?: string;
+  issueDate: string;
+  completionDate?: string;
+  certificateUrl: string;
+  offChainUrl: string;
+  transactionHash?: string;
+  createdAt: string;
 }
 
-interface StudentProfile {
-  id: string
-  fullName: string
-  email: string
-  phone: string
-  address: string
-  institution: string
-  studentId: string
-  enrollmentDate: string
-  avatar: string
-}
+export default function StudentCertificatesPage() {
+  const router = useRouter();
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-const mockProfile: StudentProfile = {
-  id: "1",
-  fullName: "John Doe",
-  email: "john.doe@student.edu",
-  phone: "+1 (555) 123-4567",
-  address: "123 Student Ave, University City, CA 90210",
-  institution: "Tech University",
-  studentId: "STU-2024-001",
-  enrollmentDate: "2022-09-01",
-  avatar: "/student-avatar.png",
-}
+  useEffect(() => {
+    fetchCertificates();
+  }, []);
 
-const mockCertificates: StudentCertificate[] = [
-  {
-    id: "1",
-    certificateId: "CERT-2024-001234",
-    courseName: "Advanced Web Development",
-    courseCode: "CS-401",
-    institution: "Tech University",
-    grade: "A+",
-    issueDate: "2024-03-15",
-    completionDate: "2024-03-10",
-    status: "active",
-    blockchainTxId: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-    certificateHash: "0x1a2b3c4d5e6f7890abcdef1234567890abcdef12",
-    credits: 4,
-    instructor: "Dr. Sarah Johnson",
-    description:
-      "Comprehensive course covering modern web development technologies including React, Node.js, and blockchain integration.",
-  },
-  {
-    id: "2",
-    certificateId: "CERT-2024-001235",
-    courseName: "Data Structures and Algorithms",
-    courseCode: "CS-301",
-    institution: "Tech University",
-    grade: "A",
-    issueDate: "2024-02-20",
-    completionDate: "2024-02-15",
-    status: "active",
-    blockchainTxId: "0xbcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567891",
-    certificateHash: "0x2b3c4d5e6f7890ab1cdef234567890abcdef123",
-    credits: 3,
-    instructor: "Prof. Michael Chen",
-    description: "Fundamental algorithms and data structures with practical implementation exercises.",
-  },
-  {
-    id: "3",
-    certificateId: "CERT-2024-001236",
-    courseName: "Machine Learning Basics",
-    courseCode: "CS-501",
-    institution: "Tech University",
-    grade: "B+",
-    issueDate: "2024-01-30",
-    completionDate: "2024-01-25",
-    status: "pending",
-    blockchainTxId: "",
-    certificateHash: "",
-    credits: 4,
-    instructor: "Dr. Emily Rodriguez",
-    description: "Introduction to machine learning concepts, algorithms, and practical applications.",
-  },
-]
-
-export default function StudentPage() {
-  const [profile, setProfile] = useState<StudentProfile>(mockProfile)
-  const [certificates, setCertificates] = useState<StudentCertificate[]>(mockCertificates)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-
-  const activeCertificates = certificates.filter((cert) => cert.status === "active")
-  const pendingCertificates = certificates.filter((cert) => cert.status === "pending")
-  const totalCredits = activeCertificates.reduce((sum, cert) => sum + cert.credits, 0)
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Verified</Badge>
-      case "pending":
-        return <Badge variant="secondary">Pending</Badge>
-      case "revoked":
-        return <Badge variant="destructive">Revoked</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
-
-  const copyToClipboard = async (text: string, id: string) => {
+  const fetchCertificates = async () => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedId(id)
-      toast({
-        title: "Copied to clipboard",
-        description: "Certificate ID has been copied to your clipboard.",
-      })
-      setTimeout(() => setCopiedId(null), 2000)
-    } catch (err) {
-      toast({
-        title: "Failed to copy",
-        description: "Could not copy to clipboard. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
 
-  const shareProfile = async () => {
-    const profileUrl = `${window.location.origin}/student/profile/${profile.id}`
-    try {
-      await navigator.clipboard.writeText(profileUrl)
-      toast({
-        title: "Profile link copied",
-        description: "Your profile link has been copied to clipboard.",
-      })
-    } catch (err) {
-      toast({
-        title: "Failed to copy",
-        description: "Could not copy profile link. Please try again.",
-        variant: "destructive",
-      })
+      const response = await fetch("/api/certificate/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch certificates");
+      }
+
+      const data = await response.json();
+      setCertificates(data.certificates || []);
+    } catch (error) {
+      console.error("Error fetching certificates:", error);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleViewDetails = (certificate: Certificate) => {
+    setSelectedCertificate(certificate);
+    setIsDialogOpen(true);
+  };
+
+  const handleDownload = (certificateUrl: string) => {
+    window.open(certificateUrl, "_blank");
+  };
+
+  const calculateTotalMarks = (marks: Array<{ subject: string; marks: number }>) => {
+    return marks.reduce((sum, mark) => sum + mark.marks, 0);
+  };
+
+  const calculatePercentage = (marks: Array<{ subject: string; marks: number }>) => {
+    const total = calculateTotalMarks(marks);
+    const maxMarks = marks.length * 100;
+    return ((total / maxMarks) * 100).toFixed(2);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container flex items-center justify-center" style={{ minHeight: "80vh" }}>
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Loading your certificates...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    // <ProtectedRoute requiredRole="student">
-      <div className="min-h-screen bg-background">
-        <Navigation />
-
-        <div className="container mx-auto px-4 py-8">
-          {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-            <div className="flex items-center space-x-4">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={profile.avatar || "/placeholder.svg"} alt={profile.fullName} />
-                <AvatarFallback className="text-lg">
-                  {profile.fullName
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="inline-flex items-center space-x-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium mb-2">
-                  <Shield className="h-4 w-4" />
-                  <span>Student Portal</span>
-                </div>
-                <h1 className="text-3xl font-bold">Welcome back, {profile.fullName.split(" ")[0]}!</h1>
-                <p className="text-muted-foreground">
-                  {profile.institution} • Student ID: {profile.studentId}
-                </p>
-              </div>
-            </div>
-            <Button onClick={shareProfile} variant="outline" className="mt-4 md:mt-0 bg-transparent">
-              <Share2 className="mr-2 h-4 w-4" />
-              Share Profile
-            </Button>
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <GraduationCap className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold">My Certificates</h1>
           </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-2">
-                  <Award className="h-8 w-8 text-primary" />
-                  <div>
-                    <p className="text-2xl font-bold">{certificates.length}</p>
-                    <p className="text-sm text-muted-foreground">Total Certificates</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-2">
-                  <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <div className="h-4 w-4 bg-green-600 rounded-full"></div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{activeCertificates.length}</p>
-                    <p className="text-sm text-muted-foreground">Verified</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-2">
-                  <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <div className="h-4 w-4 bg-yellow-600 rounded-full"></div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{pendingCertificates.length}</p>
-                    <p className="text-sm text-muted-foreground">Pending</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-2">
-                  <Building className="h-8 w-8 text-primary" />
-                  <div>
-                    <p className="text-2xl font-bold">{totalCredits}</p>
-                    <p className="text-sm text-muted-foreground">Total Credits</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Main Content */}
-          <Tabs defaultValue="certificates" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="certificates">My Certificates</TabsTrigger>
-              <TabsTrigger value="profile">Profile Settings</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="certificates" className="space-y-6">
-              {/* Certificates Grid */}
-              <div className="grid gap-6">
-                {certificates.map((certificate) => (
-                  <Card key={certificate.id} className="border-2 hover:border-primary/50 transition-all duration-300">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <CardTitle className="text-xl">{certificate.courseName}</CardTitle>
-                            {getStatusBadge(certificate.status)}
-                          </div>
-                          <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                            <span className="flex items-center space-x-1">
-                              <Building className="h-4 w-4" />
-                              <span>{certificate.institution}</span>
-                            </span>
-                            <span className="flex items-center space-x-1">
-                              <Calendar className="h-4 w-4" />
-                              <span>{new Date(certificate.issueDate).toLocaleDateString()}</span>
-                            </span>
-                            <Badge variant="outline" className="font-semibold">
-                              {certificate.grade}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-muted-foreground">{certificate.description}</p>
-
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4 text-primary" />
-                            <span className="text-sm font-medium">Instructor:</span>
-                            <span className="text-sm">{certificate.instructor}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Award className="h-4 w-4 text-primary" />
-                            <span className="text-sm font-medium">Credits:</span>
-                            <span className="text-sm">{certificate.credits}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4 text-primary" />
-                            <span className="text-sm font-medium">Completed:</span>
-                            <span className="text-sm">{new Date(certificate.completionDate).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-
-                        {certificate.status === "active" && (
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <Shield className="h-4 w-4 text-primary" />
-                              <span className="text-sm font-medium">Certificate ID:</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto p-1 text-xs font-mono"
-                                onClick={() => copyToClipboard(certificate.certificateId, certificate.id)}
-                              >
-                                {certificate.certificateId}
-                                {copiedId === certificate.id ? (
-                                  <Check className="ml-1 h-3 w-3 text-green-600" />
-                                ) : (
-                                  <Copy className="ml-1 h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <ExternalLink className="h-4 w-4 text-primary" />
-                              <span className="text-sm font-medium">Blockchain:</span>
-                              <span className="text-xs font-mono text-muted-foreground">
-                                {certificate.blockchainTxId.substring(0, 16)}...
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {certificate.status === "active" && (
-                        <>
-                          <Separator />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2 text-sm text-green-600">
-                              <Shield className="h-4 w-4" />
-                              <span>Blockchain Verified</span>
-                            </div>
-                            <Button variant="outline" size="sm">
-                              <Share2 className="mr-2 h-4 w-4" />
-                              Share Certificate
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="profile" className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-8">
-                {/* Personal Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Personal Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName">Full Name</Label>
-                      <Input id="fullName" value={profile.fullName} readOnly />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input id="email" type="email" value={profile.email} readOnly />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input id="phone" value={profile.phone} />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Address</Label>
-                      <Input id="address" value={profile.address} />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Academic Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Academic Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="institution">Institution</Label>
-                      <Input id="institution" value={profile.institution} readOnly />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="studentId">Student ID</Label>
-                      <Input id="studentId" value={profile.studentId} readOnly />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="enrollmentDate">Enrollment Date</Label>
-                      <Input
-                        id="enrollmentDate"
-                        value={new Date(profile.enrollmentDate).toLocaleDateString()}
-                        readOnly
-                      />
-                    </div>
-
-                    <div className="pt-4">
-                      <Button>Update Profile</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Account Security */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Account Security</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Password</h4>
-                        <p className="text-sm text-muted-foreground">Last updated 30 days ago</p>
-                      </div>
-                      <Button variant="outline">Change Password</Button>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Two-Factor Authentication</h4>
-                        <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
-                      </div>
-                      <Button variant="outline">Enable 2FA</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <p className="text-muted-foreground">
+            View and manage all your blockchain-verified academic certificates
+          </p>
         </div>
+
+        {/* Stats Overview */}
+        <div className="grid gap-4 md:grid-cols-3 mb-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Certificates
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{certificates.length}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Verified On-Chain
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">
+                {certificates.filter(c => c.transactionHash).length}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Latest Issue
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold">
+                {certificates.length > 0
+                  ? format(new Date(certificates[0].issueDate), "MMM yyyy")
+                  : "N/A"}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Certificates List */}
+        {certificates.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Award className="h-16 w-16 text-muted-foreground mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No Certificates Yet</h3>
+              <p className="text-muted-foreground text-center max-w-md">
+                You don't have any certificates issued yet. Once your institution issues a certificate,
+                it will appear here.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Certificates</CardTitle>
+              <CardDescription>
+                Click on any certificate to view full details
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Certificate</TableHead>
+                    <TableHead>Degree</TableHead>
+                    <TableHead>Issuer</TableHead>
+                    <TableHead>Issue Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {certificates.map((certificate) => (
+                    <TableRow
+                      key={certificate.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleViewDetails(certificate)}
+                    >
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{certificate.courseName}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {certificate.sno}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{certificate.degree || "N/A"}</div>
+                          {certificate.specialization && (
+                            <div className="text-sm text-muted-foreground">
+                              {certificate.specialization}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          {certificate.issuerName}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          {format(new Date(certificate.issueDate), "MMM dd, yyyy")}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {certificate.transactionHash ? (
+                          <Badge variant="default" className="gap-1">
+                            <ShieldCheck className="h-3 w-3" />
+                            Verified
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Pending</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDownload(certificate.certificateUrl);
+                          }}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
       </div>
-    // </ProtectedRoute>
-  )
+
+      {/* Certificate Details Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {selectedCertificate && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Certificate Details
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedCertificate.sno}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 pt-4">
+                {/* Student Info */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Student Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Name:</span>
+                      <p className="font-medium">{selectedCertificate.studentName}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">PRN:</span>
+                      <p className="font-medium font-mono">{selectedCertificate.prn}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Email:</span>
+                      <p className="font-medium">{selectedCertificate.studentEmail}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Degree Info */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    Degree Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Degree:</span>
+                      <p className="font-medium">{selectedCertificate.degree || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Course/Major:</span>
+                      <p className="font-medium">{selectedCertificate.courseName}</p>
+                    </div>
+                    {selectedCertificate.specialization && (
+                      <div>
+                        <span className="text-muted-foreground">Specialization:</span>
+                        <p className="font-medium">{selectedCertificate.specialization}</p>
+                      </div>
+                    )}
+                    {selectedCertificate.division && (
+                      <div>
+                        <span className="text-muted-foreground">Division:</span>
+                        <p className="font-medium">{selectedCertificate.division}</p>
+                      </div>
+                    )}
+                    {selectedCertificate.cgpa && (
+                      <div>
+                        <span className="text-muted-foreground">CGPA:</span>
+                        <p className="font-medium">{selectedCertificate.cgpa}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Marks */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Academic Performance</h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Subject</TableHead>
+                          <TableHead className="text-right">Marks</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedCertificate.marks.map((mark, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{mark.subject}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {mark.marks}/100
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/50">
+                          <TableCell className="font-semibold">Total</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {calculateTotalMarks(selectedCertificate.marks)}/{selectedCertificate.marks.length * 100}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow className="bg-muted/50">
+                          <TableCell className="font-semibold">Percentage</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {calculatePercentage(selectedCertificate.marks)}%
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Issuer Info */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Issuer Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Issued By:</span>
+                      <p className="font-medium">{selectedCertificate.issuerName}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Issue Date:</span>
+                      <p className="font-medium">
+                        {format(new Date(selectedCertificate.issueDate), "MMMM dd, yyyy")}
+                      </p>
+                    </div>
+                    {selectedCertificate.completionDate && (
+                      <div>
+                        <span className="text-muted-foreground">Completion Date:</span>
+                        <p className="font-medium">
+                          {format(new Date(selectedCertificate.completionDate), "MMMM dd, yyyy")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Blockchain Info */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    Blockchain Verification
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    {selectedCertificate.transactionHash ? (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">Status:</span>
+                          <Badge variant="default" className="ml-2">Verified On-Chain</Badge>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Transaction Hash:</span>
+                          <p className="font-mono text-xs mt-1 p-2 bg-muted rounded break-all">
+                            {selectedCertificate.transactionHash}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <Badge variant="secondary">Pending Blockchain Confirmation</Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    onClick={() => handleDownload(selectedCertificate.certificateUrl)}
+                    className="flex-1"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Certificate
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(selectedCertificate.certificateUrl, "_blank")}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    View
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

@@ -36,14 +36,35 @@ model User{
 
 model Certificate {
   id              String         @id @default(uuid()) @map("_id") @db.ObjectId
-  hash            String         @unique
+  prn             String         @unique // Unique student ID
+  sno             String         @unique // Certificate serial number (auto-generated)
+  hash            String         @unique // JWT token containing all certificate details
+  
   owner           User           @relation(fields: [ownerId], references: [id])
   ownerId         String @db.ObjectId
-  offChainUrl     String
+  
+  studentName     String
+  studentEmail    String
+  marks           Json // Array of {subject: string, marks: number}
+  
+  issuerId        String // Institute ID issuing the certificate
   issuerName      String
+  
   courseName      String
+  degree          String? // Degree type (e.g., Bachelor of Science)
+  specialization  String? // Specialization/Major
+  cgpa            Float? // Cumulative GPA
+  division        String? // Division/Class (First, Second, etc.)
+  
   issueDate       DateTime
+  completionDate  DateTime?
+  
+  certificateUrl  String // Cloudinary URL of generated certificate
+  offChainUrl     String // IPFS or other off-chain storage
   transactionHash String?
   
-  @@map("certificates") // Optional: maps the model name to a table name in your database
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("certificates")
 }

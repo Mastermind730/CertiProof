@@ -5,32 +5,56 @@ pragma solidity ^0.8.15;
 
 import './Ownable.sol';
 
-contract DocStamp is Ownable {
-  mapping (bytes32 => address) public records;
+contract DocStamp {
+  // Mapping from PRN (student unique ID) to certificate hash (JWT token)
+  mapping (string => string) public certificates;
+  
+  // Mapping to check if a certificate hash exists
+  mapping (string => bool) public certificateExists;
 
-  event CertificateIssued(bytes32 indexed record, uint256 timestamp, bool returnValue);
+  event CertificateIssued(string indexed prn, string certificateHash, uint256 timestamp);
+  event CertificateRevoked(string indexed prn, uint256 timestamp);
 
-  function issueCertificate(string calldata name, string calldata details) external onlyOwner {
-    bytes32 certificate = keccak256(abi.encodePacked(name, details));
-    require(certificate != keccak256(abi.encodePacked("")));
-    records[certificate] = msg.sender;
-    emit CertificateIssued(certificate, block.timestamp, true);
+  // Issue certificate: Map PRN to certificate hash (JWT token)
+  function issueCertificate(string calldata prn, string calldata certificateHash) external onlyOwner {
+    require(bytes(prn).length > 0, "PRN cannot be empty");
+    require(bytes(certificateHash).length > 0, "Certificate hash cannot be empty");
+    require(bytes(certificates[prn]).length == 0, "Certificate already issued for this PRN");
+    
+    certificates[prn] = certificateHash;
+    certificateExists[certificateHash] = true;
+    
+    emit CertificateIssued(prn, certificateHash, block.timestamp);
+  }
+
+  // Get certificate hash by PRN
+  function getCertificateByPRN(string calldata prn) external view returns (string memory) {
+    require(bytes(certificates[prn]).length > 0, "No certificate found for this PRN");
+    return certificates[prn];
+  }
+
+  // Verify certificate by PRN and hash
+  function verifyCertificate(string calldata prn, string calldata certificateHash) external view returns (bool) {
+    return keccak256(abi.encodePacked(certificates[prn])) == keccak256(abi.encodePacked(certificateHash));
+  }
+
+  // Verify certificate hash exists
+  function verifyCertificateHash(string calldata certificateHash) external view returns (bool) {
+    return certificateExists[certificateHash];
+  }
+
+  // Revoke certificate (in case of invalidation)
+  function revokeCertificate(string calldata prn) external onlyOwner {
+    require(bytes(certificates[prn]).length > 0, "No certificate found for this PRN");
+    
+    string memory hash = certificates[prn];
+    delete certificates[prn];
+    delete certificateExists[hash];
+    
+    emit CertificateRevoked(prn, block.timestamp);
   }
 
   function owningAuthority() external view returns (address) {
     return owner;
-  }
-
-  function verifyCertificate(string calldata name, string calldata details, bytes32 certificate) external view
-   returns (bool) {
-    bytes32 certificate2 = keccak256(abi.encodePacked(name, details));
-    // are certificates the same?
-    if (certificate == certificate2) {
-      // does the certificate exist on the blockchain?
-      if (records[certificate] == owner) {
-        return true;
-      }
-    }
-    return false;
   }
 }

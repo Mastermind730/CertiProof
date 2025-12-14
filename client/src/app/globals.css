@@ -4,75 +4,75 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Professional emerald and slate color scheme for certificate verification platform */
-  --background: oklch(0.99 0 0); /* Soft off-white */
-  --foreground: oklch(0.25 0.015 255.6); /* Deep slate */
+  /* Professional indigo and emerald dual-tone color scheme */
+  --background: oklch(0.99 0.005 250); /* Soft blue-tinted white */
+  --foreground: oklch(0.25 0.02 250); /* Deep indigo-slate */
   --card: oklch(1 0 0); /* Pure white for cards */
-  --card-foreground: oklch(0.25 0.015 255.6);
+  --card-foreground: oklch(0.25 0.02 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.015 255.6);
-  --primary: oklch(0.55 0.175 165); /* Professional emerald-600 */
+  --popover-foreground: oklch(0.25 0.02 250);
+  --primary: oklch(0.5 0.2 265); /* Rich indigo-600 */
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.01 255.6); /* Soft slate background */
-  --secondary-foreground: oklch(0.25 0.015 255.6);
-  --muted: oklch(0.96 0.01 255.6);
-  --muted-foreground: oklch(0.5 0.01 255.6); /* Balanced slate */
-  --accent: oklch(0.94 0.03 180); /* Subtle emerald tint */
+  --secondary: oklch(0.55 0.175 165); /* Emerald-500 for secondary */
+  --secondary-foreground: oklch(0.99 0 0);
+  --muted: oklch(0.96 0.01 250);
+  --muted-foreground: oklch(0.5 0.015 250); /* Balanced indigo-gray */
+  --accent: oklch(0.92 0.04 165); /* Soft emerald tint */
   --accent-foreground: oklch(0.3 0.02 165);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.92 0.005 255.6); /* Subtle slate border */
-  --input: oklch(0.92 0.005 255.6);
-  --ring: oklch(0.55 0.175 165); /* Emerald ring */
-  --chart-1: oklch(0.55 0.175 165); /* Emerald */
-  --chart-2: oklch(0.6 0.15 240); /* Blue */
-  --chart-3: oklch(0.65 0.18 280); /* Purple */
-  --chart-4: oklch(0.7 0.16 140); /* Teal */
-  --chart-5: oklch(0.6 0.2 80); /* Amber */
+  --border: oklch(0.92 0.008 250); /* Subtle indigo border */
+  --input: oklch(0.92 0.008 250);
+  --ring: oklch(0.5 0.2 265); /* Indigo ring */
+  --chart-1: oklch(0.5 0.2 265); /* Indigo */
+  --chart-2: oklch(0.55 0.175 165); /* Emerald */
+  --chart-3: oklch(0.6 0.18 240); /* Blue */
+  --chart-4: oklch(0.6 0.16 190); /* Cyan */
+  --chart-5: oklch(0.65 0.18 285); /* Purple */
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.25 0.015 255.6);
-  --sidebar-primary: oklch(0.55 0.175 165);
+  --sidebar: oklch(0.985 0.005 250);
+  --sidebar-foreground: oklch(0.25 0.02 250);
+  --sidebar-primary: oklch(0.5 0.2 265);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.01 255.6);
-  --sidebar-accent-foreground: oklch(0.25 0.015 255.6);
-  --sidebar-border: oklch(0.92 0.005 255.6);
-  --sidebar-ring: oklch(0.55 0.175 165);
+  --sidebar-accent: oklch(0.96 0.01 250);
+  --sidebar-accent-foreground: oklch(0.25 0.02 250);
+  --sidebar-border: oklch(0.92 0.008 250);
+  --sidebar-ring: oklch(0.5 0.2 265);
 }
 
 .dark {
-  --background: oklch(0.15 0.01 255.6); /* Rich dark slate */
-  --foreground: oklch(0.95 0.005 180);
-  --card: oklch(0.2 0.012 255.6); /* Elevated dark card */
-  --card-foreground: oklch(0.95 0.005 180);
-  --popover: oklch(0.2 0.012 255.6);
-  --popover-foreground: oklch(0.95 0.005 180);
-  --primary: oklch(0.65 0.18 165); /* Brighter emerald for dark mode */
-  --primary-foreground: oklch(0.15 0.01 255.6);
-  --secondary: oklch(0.25 0.015 255.6);
-  --secondary-foreground: oklch(0.95 0.005 180);
-  --muted: oklch(0.25 0.015 255.6);
-  --muted-foreground: oklch(0.65 0.01 255.6);
-  --accent: oklch(0.3 0.03 165); /* Emerald accent */
-  --accent-foreground: oklch(0.95 0.005 180);
+  --background: oklch(0.15 0.015 255); /* Rich dark indigo-slate */
+  --foreground: oklch(0.95 0.008 250);
+  --card: oklch(0.2 0.02 255); /* Elevated dark card with indigo tint */
+  --card-foreground: oklch(0.95 0.008 250);
+  --popover: oklch(0.2 0.02 255);
+  --popover-foreground: oklch(0.95 0.008 250);
+  --primary: oklch(0.6 0.2 265); /* Brighter indigo for dark mode */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.65 0.18 165); /* Bright emerald */
+  --secondary-foreground: oklch(0.15 0.015 255);
+  --muted: oklch(0.25 0.02 255);
+  --muted-foreground: oklch(0.65 0.015 250);
+  --accent: oklch(0.3 0.05 165); /* Emerald accent for dark mode */
+  --accent-foreground: oklch(0.95 0.008 250);
   --destructive: oklch(0.65 0.22 27.325);
-  --destructive-foreground: oklch(0.95 0.005 180);
-  --border: oklch(0.3 0.015 255.6);
-  --input: oklch(0.3 0.015 255.6);
-  --ring: oklch(0.65 0.18 165);
-  --chart-1: oklch(0.65 0.18 165); /* Emerald */
-  --chart-2: oklch(0.65 0.16 240); /* Blue */
-  --chart-3: oklch(0.7 0.18 280); /* Purple */
-  --chart-4: oklch(0.7 0.16 140); /* Teal */
-  --chart-5: oklch(0.68 0.2 80); /* Amber */
-  --sidebar: oklch(0.2 0.012 255.6);
-  --sidebar-foreground: oklch(0.95 0.005 180);
-  --sidebar-primary: oklch(0.65 0.18 165);
-  --sidebar-primary-foreground: oklch(0.15 0.01 255.6);
-  --sidebar-accent: oklch(0.25 0.015 255.6);
-  --sidebar-accent-foreground: oklch(0.95 0.005 180);
-  --sidebar-border: oklch(0.3 0.015 255.6);
-  --sidebar-ring: oklch(0.65 0.18 165);
+  --destructive-foreground: oklch(0.95 0.008 250);
+  --border: oklch(0.3 0.02 255);
+  --input: oklch(0.3 0.02 255);
+  --ring: oklch(0.6 0.2 265);
+  --chart-1: oklch(0.6 0.2 265); /* Indigo */
+  --chart-2: oklch(0.65 0.18 165); /* Emerald */
+  --chart-3: oklch(0.65 0.18 240); /* Blue */
+  --chart-4: oklch(0.65 0.16 190); /* Cyan */
+  --chart-5: oklch(0.7 0.18 285); /* Purple */
+  --sidebar: oklch(0.2 0.02 255);
+  --sidebar-foreground: oklch(0.95 0.008 250);
+  --sidebar-primary: oklch(0.6 0.2 265);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.25 0.02 255);
+  --sidebar-accent-foreground: oklch(0.95 0.008 250);
+  --sidebar-border: oklch(0.3 0.02 255);
+  --sidebar-ring: oklch(0.6 0.2 265);
 }
 
 @theme inline {

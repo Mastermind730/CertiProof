@@ -179,15 +179,31 @@ export default function CreateCertificatePage() {
       }
 
       // Step 4: Issue certificate on blockchain (PRN -> Certificate Hash mapping)
-      setLoadingMessage("Recording on blockchain...");
-      const tx = await (contract as any).issueCertificate(
-        formData.prn,
-        data.certificate.certificateHash
-      );
-      console.log("Transaction submitted:", tx.hash);
-
-      await tx.wait(); // Wait for confirmation
-      console.log("Transaction confirmed");
+      setLoadingMessage("Recording on blockchain... Please confirm the transaction in your wallet and keep this tab active.");
+      
+      let tx;
+      try {
+        tx = await (contract as any).issueCertificate(
+          formData.prn,
+          data.certificate.certificateHash
+        );
+        console.log("Transaction submitted:", tx.hash);
+        
+        setLoadingMessage("Transaction submitted. Waiting for blockchain confirmation...");
+        await tx.wait(); // Wait for confirmation
+        console.log("Transaction confirmed");
+      } catch (txError: any) {
+        // Handle specific Web3 errors
+        if (txError.code === -32002) {
+          throw new Error("Transaction failed: Please keep this tab active and in focus while the transaction is being processed.");
+        } else if (txError.code === 4001) {
+          throw new Error("Transaction rejected: You rejected the transaction in your wallet.");
+        } else if (txError.message?.includes("user rejected")) {
+          throw new Error("Transaction rejected by user.");
+        } else {
+          throw new Error(`Blockchain error: ${txError.message || "Unknown error occurred"}`);
+        }
+      }
       
       // Step 5: Update certificate with transaction hash
       setLoadingMessage("Finalizing certificate...");
@@ -206,9 +222,21 @@ export default function CreateCertificatePage() {
       setIsSuccess(true);
       setTimeout(() => router.push("/admin"), 3000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error issuing certificate:", error);
-      alert(error instanceof Error ? error.message : "Failed to issue certificate");
+      
+      // Provide user-friendly error messages
+      let errorMessage = "Failed to issue certificate";
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.reason) {
+        errorMessage = error.reason;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
       setLoadingMessage("");

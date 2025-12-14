@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({
       status: "success",
       user: tokenPayload,
+      token, // Include token in response body
     });
 
     // Set JWT token in cookie

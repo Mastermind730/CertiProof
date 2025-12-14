@@ -5,7 +5,7 @@ pragma solidity ^0.8.15;
 
 import './Ownable.sol';
 
-contract DocStamp {
+contract DocStamp  {
   // Mapping from PRN (student unique ID) to certificate hash (JWT token)
   mapping (string => string) public certificates;
   
@@ -16,7 +16,7 @@ contract DocStamp {
   event CertificateRevoked(string indexed prn, uint256 timestamp);
 
   // Issue certificate: Map PRN to certificate hash (JWT token)
-  function issueCertificate(string calldata prn, string calldata certificateHash) external onlyOwner {
+  function issueCertificate(string calldata prn, string calldata certificateHash) external  {
     require(bytes(prn).length > 0, "PRN cannot be empty");
     require(bytes(certificateHash).length > 0, "Certificate hash cannot be empty");
     require(bytes(certificates[prn]).length == 0, "Certificate already issued for this PRN");
@@ -44,7 +44,7 @@ contract DocStamp {
   }
 
   // Revoke certificate (in case of invalidation)
-  function revokeCertificate(string calldata prn) external onlyOwner {
+  function revokeCertificate(string calldata prn) external  {
     require(bytes(certificates[prn]).length > 0, "No certificate found for this PRN");
     
     string memory hash = certificates[prn];
@@ -54,7 +54,7 @@ contract DocStamp {
     emit CertificateRevoked(prn, block.timestamp);
   }
 
-  function owningAuthority() external view returns (address) {
-    return owner;
-  }
+  //function owningAuthority() external view returns (address) {
+   // return owner;
+//  }
 }

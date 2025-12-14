@@ -11,14 +11,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const decoded = verifyToken(token);
+    const decoded = await verifyToken(token);
     if (!decoded) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     // Find user by wallet address
     const user = await prisma.user.findUnique({
-      where: { wallet_address: decoded.wallet_address },
+      where: { wallet_address: decoded.wallet_address as string },
     });
 
     if (!user) {

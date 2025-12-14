@@ -54,6 +54,13 @@ function Login() {
           });
 
           if (response.ok) {
+            const data = await response.json();
+            
+            // Store token in localStorage for API requests
+            if (data.token) {
+              localStorage.setItem('token', data.token);
+            }
+            
             // Redirect to dashboard after successful authentication
             router.push('/dashboard');
           } else {

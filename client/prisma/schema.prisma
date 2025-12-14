@@ -25,6 +25,7 @@ model User{
   name String
   role ROLE @default(STUDENT)
   cerificates Certificate[]
+  verificationRequests VerificationRequest[]
 
   wallet_address String @unique
   profile_image String?
@@ -35,7 +36,7 @@ model User{
 }
 
 model Certificate {
-  id              String         @id @default(uuid()) @map("_id") @db.ObjectId
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
   prn             String         @unique // Unique student ID
   sno             String         @unique // Certificate serial number (auto-generated)
   hash            String         @unique // JWT token containing all certificate details
@@ -63,8 +64,38 @@ model Certificate {
   offChainUrl     String // IPFS or other off-chain storage
   transactionHash String?
   
+  verificationRequests VerificationRequest[]
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   @@map("certificates")
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model VerificationRequest {
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  
+  certificate     Certificate        @relation(fields: [certificateId], references: [id])
+  certificateId   String             @db.ObjectId
+  
+  student         User               @relation(fields: [studentId], references: [id])
+  studentId       String             @db.ObjectId
+  
+  verifierName    String // Name of person requesting verification
+  verifierEmail   String // Email of person requesting verification
+  verifierOrg     String? // Organization of verifier
+  purpose         String? // Purpose of verification
+  
+  status          VerificationStatus @default(PENDING)
+  
+  requestedAt     DateTime           @default(now())
+  respondedAt     DateTime?
+  
+  @@map("verification_requests")
 }

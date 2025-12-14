@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
 import { Separator } from "@/app/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +22,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/app/components/ui/table";
-import { Award, Download, ExternalLink, Calendar, Building2, GraduationCap, FileText, Loader2, ShieldCheck } from "lucide-react";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/app/components/ui/alert";
+import { Award, Download, ExternalLink, Calendar, Building2, GraduationCap, FileText, Loader2, ShieldCheck, Bell, CheckCircle, XCircle, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/app/hooks/use-toast";
 
 interface Certificate {
   id: string;
@@ -48,15 +55,41 @@ interface Certificate {
   createdAt: string;
 }
 
+interface VerificationRequest {
+  id: string;
+  certificateId: string;
+  verifierName: string;
+  verifierEmail: string;
+  verifierOrg?: string;
+  purpose?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  requestedAt: string;
+  respondedAt?: string;
+  certificate: {
+    prn: string;
+    sno: string;
+    courseName: string;
+    degree?: string;
+  };
+}
+
 export default function StudentCertificatesPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [studentId, setStudentId] = useState<string>("");
 
   useEffect(() => {
     fetchCertificates();
+    fetchVerificationRequests();
+    // Poll for new requests every 30 seconds
+    const interval = setInterval(fetchVerificationRequests, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchCertificates = async () => {
@@ -79,10 +112,132 @@ export default function StudentCertificatesPage() {
 
       const data = await response.json();
       setCertificates(data.certificates || []);
+      
+      // Get student ID from first certificate
+      if (data.certificates && data.certificates.length > 0) {
+        const certResponse = await fetch(`/api/user`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (certResponse.ok) {
+          const userData = await certResponse.json();
+          setStudentId(userData.id);
+        }
+      }
     } catch (error) {
       console.error("Error fetching certificates:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchVerificationRequests = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      // Get user info to get student ID
+      const userResponse = await fetch("/api/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!userResponse.ok) return;
+
+      const userData = await userResponse.json();
+      const sid = userData.id;
+      setStudentId(sid);
+
+      const response = await fetch(`/api/verification-request?studentId=${sid}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setVerificationRequests(data.requests || []);
+      }
+    } catch (error) {
+      console.error("Error fetching verification requests:", error);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string) => {
+    setProcessingRequest(requestId);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/verification-request/approve", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestId,
+          action: "APPROVED",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to approve request");
+      }
+
+      toast({
+        title: "Request Approved",
+        description: "The verifier has been notified and can now view the certificate.",
+      });
+
+      fetchVerificationRequests();
+    } catch (error) {
+      console.error("Error approving request:", error);
+      toast({
+        title: "Error",
+        description: "Failed to approve the request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setProcessingRequest(requestId);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/verification-request/approve", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          requestId,
+          action: "REJECTED",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to reject request");
+      }
+
+      toast({
+        title: "Request Rejected",
+        description: "The verification request has been denied.",
+      });
+
+      fetchVerificationRequests();
+    } catch (error) {
+      console.error("Error rejecting request:", error);
+      toast({
+        title: "Error",
+        description: "Failed to reject the request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingRequest(null);
     }
   };
 
@@ -105,6 +260,10 @@ export default function StudentCertificatesPage() {
     return ((total / maxMarks) * 100).toFixed(2);
   };
 
+  const pendingRequests = verificationRequests.filter(r => r.status === "PENDING");
+  const approvedRequests = verificationRequests.filter(r => r.status === "APPROVED");
+  const rejectedRequests = verificationRequests.filter(r => r.status === "REJECTED");
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -126,17 +285,30 @@ export default function StudentCertificatesPage() {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <GraduationCap className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">My Certificates</h1>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <GraduationCap className="h-8 w-8 text-primary" />
+                <h1 className="text-3xl font-bold">My Dashboard</h1>
+              </div>
+              <p className="text-muted-foreground">
+                Manage your certificates and verification requests
+              </p>
+            </div>
+            {pendingRequests.length > 0 && (
+              <Alert className="w-auto border-2 border-primary">
+                <Bell className="h-4 w-4" />
+                <AlertTitle>New Requests!</AlertTitle>
+                <AlertDescription>
+                  You have {pendingRequests.length} pending verification request{pendingRequests.length > 1 ? 's' : ''}
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
-          <p className="text-muted-foreground">
-            View and manage all your blockchain-verified academic certificates
-          </p>
         </div>
 
         {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-3 mb-8">
+        <div className="grid gap-4 md:grid-cols-4 mb-8">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -145,6 +317,19 @@ export default function StudentCertificatesPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold">{certificates.length}</div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Pending Requests
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-primary">
+                {pendingRequests.length}
+              </div>
             </CardContent>
           </Card>
 
@@ -164,117 +349,323 @@ export default function StudentCertificatesPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Latest Issue
+                Approved Access
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold">
-                {certificates.length > 0
-                  ? format(new Date(certificates[0].issueDate), "MMM yyyy")
-                  : "N/A"}
+              <div className="text-3xl font-bold text-secondary">
+                {approvedRequests.length}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Certificates List */}
-        {certificates.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Award className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Certificates Yet</h3>
-              <p className="text-muted-foreground text-center max-w-md">
-                You don't have any certificates issued yet. Once your institution issues a certificate,
-                it will appear here.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>All Certificates</CardTitle>
-              <CardDescription>
-                Click on any certificate to view full details
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Certificate</TableHead>
-                    <TableHead>Degree</TableHead>
-                    <TableHead>Issuer</TableHead>
-                    <TableHead>Issue Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {certificates.map((certificate) => (
-                    <TableRow
-                      key={certificate.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleViewDetails(certificate)}
-                    >
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{certificate.courseName}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {certificate.sno}
+        {/* Tabs for Certificates and Verification Requests */}
+        <Tabs defaultValue="certificates" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="certificates">
+              <Award className="h-4 w-4 mr-2" />
+              Certificates
+            </TabsTrigger>
+            <TabsTrigger value="requests">
+              <Bell className="h-4 w-4 mr-2" />
+              Verification Requests
+              {pendingRequests.length > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {pendingRequests.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Certificates Tab */}
+          <TabsContent value="certificates" className="space-y-4">
+            {certificates.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Award className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No Certificates Yet</h3>
+                  <p className="text-muted-foreground text-center max-w-md">
+                    You don't have any certificates issued yet. Once your institution issues a certificate,
+                    it will appear here.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Certificates</CardTitle>
+                  <CardDescription>
+                    Click on any certificate to view full details
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Certificate</TableHead>
+                        <TableHead>Degree</TableHead>
+                        <TableHead>Issuer</TableHead>
+                        <TableHead>Issue Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {certificates.map((certificate) => (
+                        <TableRow
+                          key={certificate.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleViewDetails(certificate)}
+                        >
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{certificate.courseName}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {certificate.sno}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{certificate.degree || "N/A"}</div>
+                              {certificate.specialization && (
+                                <div className="text-sm text-muted-foreground">
+                                  {certificate.specialization}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              {certificate.issuerName}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              {format(new Date(certificate.issueDate), "MMM dd, yyyy")}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {certificate.transactionHash ? (
+                              <Badge variant="default" className="gap-1">
+                                <ShieldCheck className="h-3 w-3" />
+                                Verified
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">Pending</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownload(certificate.certificateUrl);
+                              }}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* Verification Requests Tab */}
+          <TabsContent value="requests" className="space-y-4">
+            {/* Pending Requests */}
+            {pendingRequests.length > 0 && (
+              <Card className="border-2 border-primary">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary" />
+                    Pending Approval ({pendingRequests.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Review and approve or reject verification requests
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {pendingRequests.map((request) => (
+                    <div key={request.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{request.certificate.prn}</Badge>
+                            <span className="text-sm text-muted-foreground">•</span>
+                            <span className="text-sm font-medium">{request.certificate.courseName}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Requester:</span>
+                              <p className="font-medium">{request.verifierName}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Email:</span>
+                              <p className="font-medium">{request.verifierEmail}</p>
+                            </div>
+                            {request.verifierOrg && (
+                              <div>
+                                <span className="text-muted-foreground">Organization:</span>
+                                <p className="font-medium">{request.verifierOrg}</p>
+                              </div>
+                            )}
+                            {request.purpose && (
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">Purpose:</span>
+                                <p className="font-medium">{request.purpose}</p>
+                              </div>
+                            )}
+                            <div className="col-span-2">
+                              <span className="text-muted-foreground">Requested:</span>
+                              <p className="font-medium">{format(new Date(request.requestedAt), "PPpp")}</p>
+                            </div>
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{certificate.degree || "N/A"}</div>
-                          {certificate.specialization && (
-                            <div className="text-sm text-muted-foreground">
-                              {certificate.specialization}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                          {certificate.issuerName}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          {format(new Date(certificate.issueDate), "MMM dd, yyyy")}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {certificate.transactionHash ? (
-                          <Badge variant="default" className="gap-1">
-                            <ShieldCheck className="h-3 w-3" />
-                            Verified
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">Pending</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
+                      </div>
+                      <div className="flex gap-2 pt-2">
                         <Button
-                          variant="ghost"
                           size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDownload(certificate.certificateUrl);
-                          }}
+                          onClick={() => handleApproveRequest(request.id)}
+                          disabled={processingRequest === request.id}
+                          className="flex-1"
                         >
-                          <Download className="h-4 w-4" />
+                          {processingRequest === request.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Approve
                         </Button>
-                      </TableCell>
-                    </TableRow>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRejectRequest(request.id)}
+                          disabled={processingRequest === request.id}
+                          className="flex-1"
+                        >
+                          {processingRequest === request.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-2" />
+                          )}
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Approved Requests */}
+            {approvedRequests.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-secondary" />
+                    Approved ({approvedRequests.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Requester</TableHead>
+                        <TableHead>Certificate</TableHead>
+                        <TableHead>Organization</TableHead>
+                        <TableHead>Approved On</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {approvedRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{request.verifierName}</div>
+                              <div className="text-sm text-muted-foreground">{request.verifierEmail}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{request.certificate.courseName}</div>
+                              <div className="text-sm text-muted-foreground">{request.certificate.prn}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{request.verifierOrg || "—"}</TableCell>
+                          <TableCell>{request.respondedAt ? format(new Date(request.respondedAt), "PPp") : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Rejected Requests */}
+            {rejectedRequests.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <XCircle className="h-5 w-5 text-destructive" />
+                    Rejected ({rejectedRequests.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Requester</TableHead>
+                        <TableHead>Certificate</TableHead>
+                        <TableHead>Rejected On</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rejectedRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{request.verifierName}</div>
+                              <div className="text-sm text-muted-foreground">{request.verifierEmail}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{request.certificate.courseName}</div>
+                              <div className="text-sm text-muted-foreground">{request.certificate.prn}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{request.respondedAt ? format(new Date(request.respondedAt), "PPp") : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {verificationRequests.length === 0 && (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Bell className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No Verification Requests</h3>
+                  <p className="text-muted-foreground text-center max-w-md">
+                    You haven't received any verification requests yet. When someone attempts to verify
+                    your certificate, you'll see it here.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Certificate Details Dialog */}

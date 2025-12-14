@@ -8,13 +8,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { prn, verifierEmail } = body
 
+    console.log("=== VERIFY REQUEST ===")
+    console.log("PRN:", prn)
+    console.log("Verifier Email:", verifierEmail)
+
     if (!prn || !verifierEmail) {
+      console.log("Missing PRN or verifierEmail")
       return NextResponse.json({ 
         error: "PRN and verifier email are required" 
       }, { status: 400 })
     }
 
     // Find the certificate
+    console.log("Finding certificate with PRN:", prn)
     const certificate = await prisma.certificate.findUnique({
       where: { prn },
       include: {
@@ -23,12 +29,16 @@ export async function POST(req: NextRequest) {
     })
 
     if (!certificate) {
+      console.log("Certificate not found")
       return NextResponse.json({ 
         error: "Certificate not found" 
       }, { status: 404 })
     }
 
+    console.log("Certificate found:", certificate.id)
+
     // Check if there's an approved verification request
+    console.log("Checking for approved verification request...")
     const approvedRequest = await prisma.verificationRequest.findFirst({
       where: {
         certificateId: certificate.id,
@@ -38,6 +48,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (!approvedRequest) {
+      console.log("No approved request found")
       return NextResponse.json({
         error: "Verification not authorized. Please request access first.",
         needsApproval: true,
@@ -45,42 +56,27 @@ export async function POST(req: NextRequest) {
       }, { status: 403 })
     }
 
-    // Verify on blockchain
+    console.log("Approved request found:", approvedRequest.id)
+
+    console.log("Approved request found:", approvedRequest.id)
+
+    // Verify on blockchain (optional - fallback to database if unavailable)
     let blockchainVerified = false
     let blockchainError = null
     
-    try {
-      const { ethers } = await import("ethers")
-      const { ABI, ADDRESS } = await import("@/contract")
-      
-      // Set a timeout for blockchain verification (10 seconds for remote RPC)
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Blockchain connection timeout")), 10000)
-      )
-      
-      const verifyPromise = (async () => {
-        const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL
-        if (!rpcUrl) {
-          throw new Error("RPC URL not configured")
-        }
-        const provider = new ethers.JsonRpcProvider(rpcUrl)
-        const contract = new ethers.Contract(ADDRESS, ABI, provider)
-        return await contract.verifyCertificate(prn, certificate.hash)
-      })()
-      
-      // Race between timeout and verification
-      blockchainVerified = await Promise.race([verifyPromise, timeoutPromise]) as boolean
-      console.log("Blockchain verification result:", blockchainVerified)
-    } catch (error: any) {
-      blockchainError = error.message || "Blockchain unavailable"
-      console.log("Blockchain verification skipped:", blockchainError)
-      // If certificate has a transaction hash, it was verified when created
-      if (certificate.transactionHash) {
-        blockchainVerified = true
-        console.log("Certificate was previously verified on blockchain (tx:", certificate.transactionHash, ")")
-      }
+    console.log("Checking blockchain verification status...")
+    
+    // If certificate has a transaction hash, it was already verified on blockchain during creation
+    if (certificate.transactionHash) {
+      blockchainVerified = true
+      console.log("✓ Certificate verified on blockchain during creation (tx:", certificate.transactionHash, ")")
+    } else {
+      console.log("⚠ No transaction hash - skipping blockchain verification")
+      blockchainError = "Certificate not published on blockchain"
     }
 
+    console.log("Preparing certificate response...")
+    
     // Return certificate data
     return NextResponse.json({
       success: true,

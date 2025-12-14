@@ -183,6 +183,14 @@ export default function VerifyPage() {
       
       console.log("Verifying with:", { prn: idToVerify, verifierEmail: emailToUse })
       
+      if (!idToVerify || !emailToUse) {
+        setError("Missing PRN or email. Please try uploading the PDF again.")
+        setIsLoading(false)
+        return
+      }
+      
+      console.log("Sending verification request...")
+      
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,7 +201,12 @@ export default function VerifyPage() {
           requestId 
         }),
       })
+      
+      console.log("Response received, status:", res.status)
+      
       const body = await res.json()
+      console.log("Verification response:", body)
+      
       if (!res.ok) {
         setError(body.error || "Verification failed")
         setIsLoading(false)
@@ -202,7 +215,7 @@ export default function VerifyPage() {
       if (body.success && body.certificate) {
         setVerificationResult(body.certificate)
       } else {
-        setError("Verification failed")
+        setError("Verification failed - no certificate data returned")
       }
     } catch (err) {
       console.error(err)

@@ -16,7 +16,7 @@ export async function sendVerificationRequestEmail(
   verifierName: string,
   verifierEmail: string,
   certificatePRN: string,
-  requestId: string
+  _requestId: string
 ) {
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/student`;
   

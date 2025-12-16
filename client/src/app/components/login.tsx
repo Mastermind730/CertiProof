@@ -10,7 +10,7 @@ interface UserInfo {
   email?: string;
   name?: string;
   profileImage?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 function Login() {
@@ -64,11 +64,24 @@ function Login() {
             // Redirect to dashboard after successful authentication
             router.push('/dashboard');
           } else {
-            console.error('Authentication failed');
+            // Try to parse JSON error, but handle non-JSON responses
+            let errorMessage = 'Authentication failed';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.details || errorData.error || errorMessage;
+            } catch (parseError) {
+              // If JSON parsing fails, try to get text
+              const errorText = await response.text();
+              console.error('Non-JSON error response:', errorText);
+              errorMessage = errorText || errorMessage;
+            }
+            console.error('Authentication failed:', errorMessage);
+            alert(`Authentication failed: ${errorMessage}`);
             setIsRedirecting(false);
           }
         } catch (err) {
           console.error('Error during authentication:', err);
+          alert(`Error during authentication: ${err instanceof Error ? err.message : 'Unknown error'}`);
           setIsRedirecting(false);
         }
       };

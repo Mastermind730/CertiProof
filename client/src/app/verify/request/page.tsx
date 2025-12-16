@@ -63,11 +63,12 @@ export default function VerificationRequestPage() {
           description: "The certificate owner will be notified. You'll receive an email once they respond.",
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error submitting request:", error);
+      const err = error as { message?: string };
       toast({
         title: "Error",
-        description: error.message || "Failed to submit verification request",
+        description: err.message || "Failed to submit verification request",
         variant: "destructive",
       });
     } finally {
@@ -157,7 +158,7 @@ export default function VerificationRequestPage() {
                     required
                   />
                   <p className="text-sm text-muted-foreground">
-                    You'll receive approval/rejection notifications at this email
+                    You&apos;ll receive approval/rejection notifications at this email
                   </p>
                 </div>
 
@@ -187,7 +188,7 @@ export default function VerificationRequestPage() {
                   <AlertTitle>Privacy Notice</AlertTitle>
                   <AlertDescription>
                     Your request will be sent to the certificate owner. They can approve or reject
-                    your request. You'll be notified via email of their decision.
+                    your request. You&apos;ll be notified via email of their decision.
                   </AlertDescription>
                 </Alert>
 
@@ -231,7 +232,7 @@ export default function VerificationRequestPage() {
                     <ul className="list-disc list-inside space-y-1 mt-2">
                       <li>The certificate owner receives an email notification</li>
                       <li>They review your request details</li>
-                      <li>You'll receive an email with their decision</li>
+                      <li>You&apos;ll receive an email with their decision</li>
                       <li>If approved, you can view the certificate details</li>
                     </ul>
                   </AlertDescription>

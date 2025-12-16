@@ -38,7 +38,7 @@ export default function VerifyPage() {
   
   // Approval flow state
   const [uploading, setUploading] = useState(false)
-  const [extractedPayload, setExtractedPayload] = useState<any | null>(null)
+  const [extractedPayload, setExtractedPayload] = useState<Record<string, unknown> | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
   const [approvalStatus, setApprovalStatus] = useState<"pending" | "approved" | "rejected" | null>(null)
   const pollRef = useRef<number | null>(null)
@@ -141,8 +141,9 @@ export default function VerifyPage() {
         setApprovalStatus("pending")
         startPolling(body.requestId)
       }
-    } catch (err: any) {
-      setError(err?.message || "Failed to extract QR code from PDF. Please enter PRN manually.")
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      setError(error?.message || "Failed to extract QR code from PDF. Please enter PRN manually.")
       console.error("PDF upload error:", err)
     } finally {
       setUploading(false)

@@ -41,7 +41,7 @@ export default function VerifyPage() {
 
   // upload & approval flow state
   const [uploading, setUploading] = useState(false)
-  const [extractedPayload, setExtractedPayload] = useState<any | null>(null)
+  const [extractedPayload, setExtractedPayload] = useState<Record<string, unknown> | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
   const [approvalStatus, setApprovalStatus] = useState<"pending" | "approved" | "rejected" | null>(null)
   const pollRef = useRef<number | null>(null)
@@ -124,9 +124,10 @@ export default function VerifyPage() {
       setRequestId(body.requestId)
       setApprovalStatus("pending")
       startPolling(body.requestId)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err)
-      setError(err?.message || "Failed to extract QR from PDF")
+      const error = err as { message?: string };
+      setError(error?.message || "Failed to extract QR from PDF")
     } finally {
       setUploading(false)
     }
@@ -231,7 +232,7 @@ export default function VerifyPage() {
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Verify Certificate Authenticity</h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Upload a PDF gradecard: we'll notify the owner and only verify after they approve.
+              Upload a PDF gradecard: we&apos;ll notify the owner and only verify after they approve.
             </p>
           </div>
 

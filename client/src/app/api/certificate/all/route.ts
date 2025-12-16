@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search'); // Search by name, prn, course
 
     // Build where clause
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     
     // Filter by status
     if (status === 'verified') {

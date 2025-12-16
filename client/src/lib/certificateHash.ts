@@ -65,7 +65,7 @@ export function generateCertificateHash(certificateData: CertificateData): strin
 export function verifyCertificateHash(certificateHash: string): CertificateData | null {
   try {
     const secret = process.env.CERTIFICATE_JWT_SECRET || process.env.JWT_SECRET || 'default-secret-key';
-    const decoded = jwt.verify(certificateHash, secret) as any;
+    const decoded = jwt.verify(certificateHash, secret) as jwt.JwtPayload & CertificateData;
     
     return {
       prn: decoded.prn,

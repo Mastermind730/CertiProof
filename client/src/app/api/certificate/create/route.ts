@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
         hash: certificateHash,
         studentName,
         studentEmail,
-        marks: marks as any, // Prisma will handle Json type
+        marks: marks as object, // Prisma will handle Json type
         issuerId: admin.id,
         issuerName: admin.name,
         courseName,

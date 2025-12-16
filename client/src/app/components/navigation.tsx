@@ -218,7 +218,7 @@ export function Navigation() {
                     Sign In
                   </Button>
                 </Link>
-                <Link href="/signup">
+                <Link href="/login">
                   <Button className="hover-lift hover-glow">Sign Up</Button>
                 </Link>
               </div>

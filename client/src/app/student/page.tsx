@@ -395,7 +395,7 @@ export default function StudentCertificatesPage() {
                   <Award className="h-16 w-16 text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">No Certificates Yet</h3>
                   <p className="text-muted-foreground text-center max-w-md">
-                    You don't have any certificates issued yet. Once your institution issues a certificate,
+                    You don&apos;t have any certificates issued yet. Once your institution issues a certificate,
                     it will appear here.
                   </p>
                 </CardContent>
@@ -667,8 +667,8 @@ export default function StudentCertificatesPage() {
                   <Bell className="h-16 w-16 text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">No Verification Requests</h3>
                   <p className="text-muted-foreground text-center max-w-md">
-                    You haven't received any verification requests yet. When someone attempts to verify
-                    your certificate, you'll see it here.
+                    You haven&apos;t received any verification requests yet. When someone attempts to verify
+                    your certificate, you&apos;ll see it here.
                   </p>
                 </CardContent>
               </Card>

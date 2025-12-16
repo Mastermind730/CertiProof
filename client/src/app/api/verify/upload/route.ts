@@ -9,7 +9,7 @@ export const approvalRequests = new Map<string, {
   email: string
   verifierEmail: string
   verifierName?: string
-  payload: any
+  payload: Record<string, unknown>
   status: "pending" | "approved" | "rejected"
   certificateId?: string
   createdAt: Date

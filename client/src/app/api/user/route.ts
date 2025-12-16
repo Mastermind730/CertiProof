@@ -28,7 +28,7 @@ async function authenticateRequest(req?: NextRequest) {
   try {
     const payload = (await verifyToken(token)) as { id: string };
     return payload;
-  } catch (error) {
+  } catch {
     throw new Error("Invalid auth token");
   }
 }

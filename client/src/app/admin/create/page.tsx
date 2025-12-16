@@ -68,7 +68,7 @@ export default function CreateCertificatePage() {
       if (contract) {
         try {
           // I'm assuming 'owningAuthority' from your original code
-          const owner = await (contract as any).owningAuthority();
+          const owner = await contract.owningAuthority();
           console.log("Contract owner:", owner);
         } catch (error) {
           console.error("Error getting owner:", error);
@@ -183,7 +183,7 @@ export default function CreateCertificatePage() {
       
       let tx;
       try {
-        tx = await (contract as any).issueCertificate(
+        tx = await contract.issueCertificate(
           formData.prn,
           data.certificate.certificateHash
         );
@@ -192,9 +192,10 @@ export default function CreateCertificatePage() {
         setLoadingMessage("Transaction submitted. Waiting for blockchain confirmation...");
         await tx.wait(); // Wait for confirmation
         console.log("Transaction confirmed");
-      } catch (txError: any) {
+      } catch (txError: unknown) {
         // Handle specific Web3 errors
-        if (txError.code === -32002) {
+        const err = txError as { code?: number; message?: string };
+        if (err.code === -32002) {
           throw new Error("Transaction failed: Please keep this tab active and in focus while the transaction is being processed.");
         } else if (txError.code === 4001) {
           throw new Error("Transaction rejected: You rejected the transaction in your wallet.");
@@ -222,16 +223,17 @@ export default function CreateCertificatePage() {
       setIsSuccess(true);
       setTimeout(() => router.push("/admin"), 3000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error issuing certificate:", error);
       
       // Provide user-friendly error messages
       let errorMessage = "Failed to issue certificate";
       
-      if (error.message) {
-        errorMessage = error.message;
-      } else if (error.reason) {
-        errorMessage = error.reason;
+      const err = error as { message?: string; reason?: string };
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.reason) {
+        errorMessage = err.reason;
       } else if (typeof error === 'string') {
         errorMessage = error;
       }

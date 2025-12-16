@@ -51,7 +51,7 @@ export async function uploadToCloudinary(
  */
 export async function uploadCertificatePDF(
   pdfFile: File,
-  prn: string
+  _prn: string
 ): Promise<string> {
   try {
     const result = await uploadToCloudinary(pdfFile, `certificates/${new Date().getFullYear()}`);

@@ -62,7 +62,7 @@ function Login() {
             }
             
             // Redirect to dashboard after successful authentication
-            router.push('/dashboard');
+            router.push('/');
           } else {
             // Try to parse JSON error, but handle non-JSON responses
             let errorMessage = 'Authentication failed';
